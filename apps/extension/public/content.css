@@ -1,0 +1,241 @@
+#bidly-sidebar-root {
+  position: fixed;
+  top: 0;
+  right: -400px;
+  width: 400px;
+  height: 100vh;
+  z-index: 2147483647;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  transition: right 0.3s ease;
+  box-shadow: -2px 0 12px rgba(0, 0, 0, 0.15);
+}
+
+#bidly-sidebar-root.bidly-open {
+  right: 0;
+}
+
+#bidly-sidebar-root * {
+  box-sizing: border-box;
+}
+
+.bidly-sidebar {
+  width: 100%;
+  height: 100%;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.bidly-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e5e5e5;
+  background: #fafafa;
+}
+
+.bidly-header-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 16px;
+  color: #171717;
+}
+
+.bidly-close-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 20px;
+  color: #666;
+  padding: 4px;
+  line-height: 1;
+}
+
+.bidly-close-btn:hover {
+  color: #171717;
+}
+
+.bidly-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.bidly-section {
+  margin-bottom: 20px;
+}
+
+.bidly-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #888;
+  margin-bottom: 8px;
+  letter-spacing: 0.5px;
+}
+
+.bidly-form-group {
+  margin-bottom: 12px;
+}
+
+.bidly-form-group label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 4px;
+}
+
+.bidly-form-group input,
+.bidly-form-group select,
+.bidly-form-group textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #d4d4d4;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  color: #171717;
+  background: #fff;
+  outline: none;
+}
+
+.bidly-form-group input:focus,
+.bidly-form-group select:focus,
+.bidly-form-group textarea:focus {
+  border-color: #171717;
+  box-shadow: 0 0 0 1px #171717;
+}
+
+.bidly-form-group textarea {
+  resize: vertical;
+  min-height: 60px;
+}
+
+.bidly-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.bidly-btn {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: inherit;
+}
+
+.bidly-btn-primary {
+  background: #171717;
+  color: white;
+}
+
+.bidly-btn-primary:hover {
+  background: #333;
+}
+
+.bidly-btn-primary:disabled {
+  background: #a3a3a3;
+  cursor: not-allowed;
+}
+
+.bidly-btn-outline {
+  background: #fff;
+  color: #171717;
+  border: 1px solid #d4d4d4;
+}
+
+.bidly-btn-outline:hover {
+  background: #f5f5f5;
+}
+
+.bidly-btn-danger {
+  background: #fff;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+}
+
+.bidly-btn-danger:hover {
+  background: #fef2f2;
+}
+
+.bidly-message {
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.bidly-message-success {
+  background: #f0fdf4;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.bidly-message-error {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.bidly-login-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 16px;
+  padding: 32px;
+}
+
+.bidly-login-container h2 {
+  font-size: 20px;
+  margin: 0;
+  color: #171717;
+}
+
+.bidly-login-container p {
+  font-size: 13px;
+  color: #666;
+  text-align: center;
+  margin: 0;
+}
+
+.bidly-login-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bidly-user-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid #e5e5e5;
+  font-size: 13px;
+  color: #555;
+  background: #fafafa;
+}
+
+.bidly-scraped-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #1e40af;
+  font-weight: 500;
+}

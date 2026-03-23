@@ -1,0 +1,82 @@
+const API_BASE = "http://localhost:5000/api"
+
+function getStorageData(key: string): Promise<any> {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(key, (result) => resolve(result[key]))
+  })
+}
+
+function setStorageData(key: string, value: any): Promise<void> {
+  return new Promise((resolve) => {
+    chrome.storage.local.set({ [key]: value }, () => resolve())
+  })
+}
+
+async function getToken(): Promise<string | null> {
+  return getStorageData("bidly_token")
+}
+
+async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  const token = await getToken()
+  return fetch(url, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
+  })
+}
+
+export async function login(email: string, password: string) {
+  const res = await fetch(`${API_BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || "Login failed")
+  await setStorageData("bidly_token", data.token)
+  await setStorageData("bidly_user", data.user)
+  return data
+}
+
+export async function getMe() {
+  const res = await authFetch(`${API_BASE}/auth/me`)
+  if (!res.ok) {
+    await setStorageData("bidly_token", null)
+    await setStorageData("bidly_user", null)
+    throw new Error("Not authenticated")
+  }
+  return res.json()
+}
+
+export async function logout() {
+  await setStorageData("bidly_token", null)
+  await setStorageData("bidly_user", null)
+}
+
+export async function getSettings() {
+  const res = await authFetch(`${API_BASE}/settings`)
+  if (!res.ok) throw new Error("Failed to get settings")
+  return res.json()
+}
+
+export async function createApplication(data: any) {
+  const res = await authFetch(`${API_BASE}/applications`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  })
+  const result = await res.json()
+  if (!res.ok) throw new Error(result.error || "Failed to create application")
+  return result
+}
+
+export async function isLoggedIn(): Promise<boolean> {
+  const token = await getToken()
+  return !!token
+}
+
+export async function getUser() {
+  return getStorageData("bidly_user")
+}
