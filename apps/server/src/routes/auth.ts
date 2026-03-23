@@ -19,8 +19,8 @@ router.post("/register", async (req, res) => {
     const user = await User.create({ email: email.toLowerCase(), password: hashedPassword, name })
 
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET!, {
-      expiresIn: process.env.JWT_EXPIRES_IN || "7d",
-    })
+      expiresIn: (process.env.JWT_EXPIRES_IN || "7d") as string & { __brand: "ms" },
+    } as jwt.SignOptions)
 
     res.status(201).json({
       token,
@@ -46,8 +46,8 @@ router.post("/login", async (req, res) => {
     }
 
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET!, {
-      expiresIn: process.env.JWT_EXPIRES_IN || "7d",
-    })
+      expiresIn: (process.env.JWT_EXPIRES_IN || "7d") as string & { __brand: "ms" },
+    } as jwt.SignOptions)
 
     res.json({
       token,

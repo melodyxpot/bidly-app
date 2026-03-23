@@ -11,8 +11,8 @@ router.get("/", async (req: AuthRequest, res) => {
     let settings = await Settings.findOne({ userId: req.userId }).lean()
 
     if (!settings) {
-      settings = await Settings.create({ userId: req.userId })
-      settings = settings.toObject()
+      const created = await Settings.create({ userId: req.userId })
+      settings = created.toObject() as any
     }
 
     res.json({ settings })
