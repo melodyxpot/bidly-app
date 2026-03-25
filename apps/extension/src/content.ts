@@ -1,17 +1,26 @@
-import { scrapeJobData, ScrapedJob } from "./scraper"
+import { scrapeJobData } from "./scraper"
 import { login, logout, createApplication, isLoggedIn, getUser, getSettings } from "./api"
 
 let sidebarRoot: HTMLElement | null = null
+let fab: HTMLElement | null = null
 let isOpen = false
+
+// Create floating action button on page load
+function createFab() {
+  if (fab) return
+  fab = document.createElement("button")
+  fab.id = "bidly-fab"
+  fab.innerHTML = "📋"
+  fab.title = "Bidly - Track this job"
+  fab.addEventListener("click", toggleSidebar)
+  document.body.appendChild(fab)
+}
 
 function createSidebar() {
   if (sidebarRoot) return
-
   sidebarRoot = document.createElement("div")
   sidebarRoot.id = "bidly-sidebar-root"
   document.body.appendChild(sidebarRoot)
-
-  renderSidebar()
 }
 
 function toggleSidebar() {
@@ -19,21 +28,27 @@ function toggleSidebar() {
   isOpen = !isOpen
   if (isOpen) {
     sidebarRoot!.classList.add("bidly-open")
+    fab?.classList.add("bidly-fab-hidden")
     renderSidebar()
   } else {
     sidebarRoot!.classList.remove("bidly-open")
+    fab?.classList.remove("bidly-fab-hidden")
   }
+}
+
+function closeSidebar() {
+  isOpen = false
+  sidebarRoot?.classList.remove("bidly-open")
+  fab?.classList.remove("bidly-fab-hidden")
 }
 
 async function renderSidebar() {
   if (!sidebarRoot) return
-
   const loggedIn = await isLoggedIn()
-  const user = await getUser()
-
   if (!loggedIn) {
     renderLogin()
   } else {
+    const user = await getUser()
     renderMain(user)
   }
 }
@@ -50,7 +65,7 @@ function renderLogin() {
       <div class="bidly-body">
         <div class="bidly-login-container">
           <h2>Sign In</h2>
-          <p>Sign in to your Bidly account to track job applications.</p>
+          <p>Sign in to your Bidly account to start tracking job applications.</p>
           <div class="bidly-login-form">
             <div class="bidly-form-group">
               <label>Email</label>
@@ -68,19 +83,20 @@ function renderLogin() {
     </div>
   `
 
-  sidebarRoot.querySelector("#bidly-close")!.addEventListener("click", toggleSidebar)
+  bindClose()
 
   const loginBtn = sidebarRoot.querySelector("#bidly-login-btn") as HTMLButtonElement
   const emailInput = sidebarRoot.querySelector("#bidly-email") as HTMLInputElement
   const passwordInput = sidebarRoot.querySelector("#bidly-password") as HTMLInputElement
   const errorDiv = sidebarRoot.querySelector("#bidly-login-error") as HTMLElement
 
+  setTimeout(() => emailInput.focus(), 50)
+
   loginBtn.addEventListener("click", async () => {
     const email = emailInput.value.trim()
     const password = passwordInput.value
     if (!email || !password) {
-      errorDiv.textContent = "Please enter email and password"
-      errorDiv.style.display = "block"
+      showError(errorDiv, "Please enter email and password")
       return
     }
 
@@ -92,8 +108,7 @@ function renderLogin() {
       await login(email, password)
       renderSidebar()
     } catch (err: any) {
-      errorDiv.textContent = err.message
-      errorDiv.style.display = "block"
+      showError(errorDiv, err.message)
       loginBtn.disabled = false
       loginBtn.textContent = "Sign In"
     }
@@ -102,6 +117,9 @@ function renderLogin() {
   passwordInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") loginBtn.click()
   })
+  emailInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") passwordInput.focus()
+  })
 }
 
 async function renderMain(user: any) {
@@ -109,15 +127,12 @@ async function renderMain(user: any) {
 
   const scraped = scrapeJobData()
 
-  // Get settings for defaults
   let settings: any = null
   try {
     const result = await getSettings()
     settings = result.settings
   } catch {}
 
-  const platforms = settings?.platformOptions || ["LinkedIn", "Wellfound", "Indeed", "Company Website", "Other"]
-  const statuses = ["Applied", "Interview", "Offer", "Rejected", "Withdrawn", "No Response"]
   const jobTypes = ["Full-time", "Part-time", "Contract", "Internship", "Freelance"]
   const workLocations = settings?.workLocationOptions || ["Remote", "Hybrid", "Onsite"]
 
@@ -126,6 +141,8 @@ async function renderMain(user: any) {
   followUpDate.setDate(followUpDate.getDate() + (settings?.followUpOffsetDays || 7))
   const followUp = followUpDate.toISOString().split("T")[0]
 
+  const hasScraped = !!(scraped.title || scraped.company)
+
   sidebarRoot.innerHTML = `
     <div class="bidly-sidebar">
       <div class="bidly-header">
@@ -133,84 +150,78 @@ async function renderMain(user: any) {
         <button class="bidly-close-btn" id="bidly-close">&times;</button>
       </div>
       <div class="bidly-user-bar">
-        <span>${user?.email || "User"}</span>
-        <button class="bidly-btn-danger bidly-btn" style="width:auto;padding:4px 12px;font-size:12px" id="bidly-logout">Sign Out</button>
+        <span class="bidly-user-email">${escapeHtml(user?.email || "User")}</span>
+        <button class="bidly-signout-btn" id="bidly-logout">Sign Out</button>
       </div>
       <div class="bidly-body">
-        ${scraped.title || scraped.company ? `
-          <div class="bidly-section">
-            <div class="bidly-section-title">Scraped from page <span class="bidly-scraped-badge">Auto-detected</span></div>
-          </div>
-        ` : ""}
+        ${hasScraped ? `<div class="bidly-scraped-bar">Scraped from page <span class="bidly-scraped-badge">Auto-detected</span></div>` : ""}
         <div id="bidly-message-area"></div>
-        <div class="bidly-section">
-          <div class="bidly-form-group">
-            <label>Company *</label>
-            <input type="text" id="bidly-company" value="${escapeHtml(scraped.company)}" />
-          </div>
-          <div class="bidly-form-group">
-            <label>Job Title *</label>
-            <input type="text" id="bidly-title" value="${escapeHtml(scraped.title)}" />
-          </div>
-          <div class="bidly-form-group">
-            <label>Job Link</label>
-            <input type="url" id="bidly-link" value="${escapeHtml(scraped.link)}" />
-          </div>
-          <div class="bidly-form-row">
-            <div class="bidly-form-group">
-              <label>Platform</label>
-              <select id="bidly-platform">
-                ${platforms.map((p: string) => `<option value="${p}" ${p === scraped.platform ? "selected" : ""}>${p}</option>`).join("")}
-              </select>
-            </div>
-            <div class="bidly-form-group">
-              <label>Status</label>
-              <select id="bidly-status">
-                ${statuses.map((s: string) => `<option value="${s}" ${s === (settings?.defaultStatus || "Applied") ? "selected" : ""}>${s}</option>`).join("")}
-              </select>
-            </div>
-          </div>
-          <div class="bidly-form-row">
-            <div class="bidly-form-group">
-              <label>Job Type</label>
-              <select id="bidly-jobtype">
-                <option value="">Select type</option>
-                ${jobTypes.map((t: string) => `<option value="${t}" ${t === scraped.jobType ? "selected" : ""}>${t}</option>`).join("")}
-              </select>
-            </div>
-            <div class="bidly-form-group">
-              <label>Work Location</label>
-              <select id="bidly-worklocation">
-                <option value="">Select</option>
-                ${workLocations.map((w: string) => `<option value="${w}" ${w === scraped.workLocation ? "selected" : ""}>${w}</option>`).join("")}
-              </select>
-            </div>
-          </div>
-          <div class="bidly-form-group">
-            <label>Location</label>
-            <input type="text" id="bidly-location" value="${escapeHtml(scraped.location)}" />
-          </div>
-          <div class="bidly-form-row">
-            <div class="bidly-form-group">
-              <label>Applied Date</label>
-              <input type="datetime-local" id="bidly-appliedat" value="${now}" />
-            </div>
-            <div class="bidly-form-group">
-              <label>Follow-up Date</label>
-              <input type="date" id="bidly-followup" value="${followUp}" />
-            </div>
-          </div>
-          <div class="bidly-form-group">
-            <label>Notes</label>
-            <textarea id="bidly-notes" rows="3" placeholder="Add any notes..."></textarea>
-          </div>
-          <button class="bidly-btn bidly-btn-primary" id="bidly-save" style="margin-top:8px">Save Application</button>
+
+        <div class="bidly-form-group">
+          <label>Company *</label>
+          <input type="text" id="bidly-company" value="${escapeHtml(scraped.company)}" />
         </div>
+        <div class="bidly-form-group">
+          <label>Job Title *</label>
+          <input type="text" id="bidly-title" value="${escapeHtml(scraped.title)}" />
+        </div>
+        <div class="bidly-form-group">
+          <label>Job Link</label>
+          <input type="url" id="bidly-link" value="${escapeHtml(scraped.link)}" />
+        </div>
+
+        <div class="bidly-form-group">
+          <label>Platform</label>
+          <input type="text" id="bidly-platform" value="${escapeHtml(scraped.platform)}" />
+        </div>
+
+        <div class="bidly-form-row">
+          <div class="bidly-form-group">
+            <label>Job Type</label>
+            <select id="bidly-jobtype">
+              <option value="">—</option>
+              ${jobTypes.map((t: string) => `<option value="${t}" ${t === scraped.jobType ? "selected" : ""}>${t}</option>`).join("")}
+            </select>
+          </div>
+          <div class="bidly-form-group">
+            <label>Work Location</label>
+            <select id="bidly-worklocation">
+              <option value="">—</option>
+              ${workLocations.map((w: string) => `<option value="${w}" ${w === scraped.workLocation ? "selected" : ""}>${w}</option>`).join("")}
+            </select>
+          </div>
+        </div>
+
+        <div class="bidly-form-group">
+          <label>Location</label>
+          <input type="text" id="bidly-location" value="${escapeHtml(scraped.location)}" />
+        </div>
+
+        <div class="bidly-divider"></div>
+
+        <div class="bidly-form-row">
+          <div class="bidly-form-group">
+            <label>Applied Date</label>
+            <input type="datetime-local" id="bidly-appliedat" value="${now}" />
+          </div>
+          <div class="bidly-form-group">
+            <label>Follow-up</label>
+            <input type="date" id="bidly-followup" value="${followUp}" />
+          </div>
+        </div>
+
+        <div class="bidly-form-group">
+          <label>Notes</label>
+          <textarea id="bidly-notes" rows="2" placeholder="Optional notes..."></textarea>
+        </div>
+
+        <button class="bidly-btn bidly-btn-primary" id="bidly-save">Save Application</button>
       </div>
     </div>
   `
 
-  sidebarRoot.querySelector("#bidly-close")!.addEventListener("click", toggleSidebar)
+  bindClose()
+
   sidebarRoot.querySelector("#bidly-logout")!.addEventListener("click", async () => {
     await logout()
     renderSidebar()
@@ -229,14 +240,15 @@ async function renderMain(user: any) {
 
     saveBtn.disabled = true
     saveBtn.textContent = "Saving..."
+    msgArea.innerHTML = ""
 
     try {
       await createApplication({
         company,
         title,
         link: (sidebarRoot!.querySelector("#bidly-link") as HTMLInputElement).value || null,
-        platform: (sidebarRoot!.querySelector("#bidly-platform") as HTMLSelectElement).value,
-        status: (sidebarRoot!.querySelector("#bidly-status") as HTMLSelectElement).value,
+        platform: (sidebarRoot!.querySelector("#bidly-platform") as HTMLInputElement).value || "Other",
+        status: settings?.defaultStatus || "Applied",
         jobType: (sidebarRoot!.querySelector("#bidly-jobtype") as HTMLSelectElement).value || null,
         workLocation: (sidebarRoot!.querySelector("#bidly-worklocation") as HTMLSelectElement).value || null,
         location: (sidebarRoot!.querySelector("#bidly-location") as HTMLInputElement).value || null,
@@ -247,18 +259,27 @@ async function renderMain(user: any) {
         notes: (sidebarRoot!.querySelector("#bidly-notes") as HTMLTextAreaElement).value || null,
       })
 
-      msgArea.innerHTML = `<div class="bidly-message bidly-message-success">✓ Application saved successfully!</div>`
+      msgArea.innerHTML = `<div class="bidly-message bidly-message-success">✓ Application saved!</div>`
       saveBtn.textContent = "Saved!"
       setTimeout(() => {
         saveBtn.disabled = false
         saveBtn.textContent = "Save Application"
       }, 2000)
     } catch (err: any) {
-      msgArea.innerHTML = `<div class="bidly-message bidly-message-error">${err.message}</div>`
+      msgArea.innerHTML = `<div class="bidly-message bidly-message-error">${escapeHtml(err.message)}</div>`
       saveBtn.disabled = false
       saveBtn.textContent = "Save Application"
     }
   })
+}
+
+function bindClose() {
+  sidebarRoot?.querySelector("#bidly-close")?.addEventListener("click", closeSidebar)
+}
+
+function showError(el: HTMLElement, msg: string) {
+  el.textContent = msg
+  el.style.display = "block"
 }
 
 function escapeHtml(str: string): string {
@@ -267,7 +288,10 @@ function escapeHtml(str: string): string {
   return div.innerHTML.replace(/"/g, "&quot;")
 }
 
-// Listen for messages from popup/background
+// Init: inject the floating button
+createFab()
+
+// Listen for messages from extension icon click
 chrome.runtime.onMessage.addListener((message) => {
   if (message.type === "TOGGLE_SIDEBAR") {
     toggleSidebar()

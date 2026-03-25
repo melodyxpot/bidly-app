@@ -4,9 +4,9 @@
   "private": true,
   "scripts": {
     "build": "next build",
-    "dev": "next dev",
+    "dev": "next dev --port 3003",
     "lint": "eslint .",
-    "start": "next start"
+    "start": "next start --port 3003"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

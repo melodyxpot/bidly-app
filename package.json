@@ -4,7 +4,10 @@
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
-    "lint": "turbo lint"
+    "lint": "turbo lint",
+    "start": "turbo start --filter=web --filter=server",
+    "start:web": "pnpm --filter web start",
+    "start:server": "pnpm --filter server start"
   },
   "devDependencies": {
     "turbo": "^2.5.0"

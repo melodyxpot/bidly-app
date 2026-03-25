@@ -149,3 +149,64 @@ export async function apiUpdateSettings(data: any) {
   if (!res.ok) throw new Error(result.error || "Failed to update settings")
   return result
 }
+
+// Profile
+export async function apiGetProfile() {
+  const res = await authFetch(`${API_BASE}/profile`)
+  if (!res.ok) throw new Error("Failed to fetch profile")
+  return res.json()
+}
+
+export async function apiUpdateProfile(data: any) {
+  const res = await authFetch(`${API_BASE}/profile`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  })
+  const result = await res.json()
+  if (!res.ok) throw new Error(result.error || "Failed to update profile")
+  return result
+}
+
+export async function apiUploadResume(file: File) {
+  const token = getToken()
+  const formData = new FormData()
+  formData.append("resume", file)
+  const res = await fetch(`${API_BASE}/profile/resume`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  })
+  const result = await res.json()
+  if (!res.ok) throw new Error(result.error || "Failed to upload resume")
+  return result
+}
+
+export async function apiDownloadResume() {
+  const token = getToken()
+  const res = await fetch(`${API_BASE}/profile/resume`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+  if (!res.ok) throw new Error("Failed to download resume")
+  return res
+}
+
+export async function apiDeleteResume() {
+  const res = await authFetch(`${API_BASE}/profile/resume`, { method: "DELETE" })
+  const result = await res.json()
+  if (!res.ok) throw new Error(result.error || "Failed to delete resume")
+  return result
+}
+
+export async function apiParseResume(file: File) {
+  const token = getToken()
+  const formData = new FormData()
+  formData.append("resume", file)
+  const res = await fetch(`${API_BASE}/profile/parse-resume`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  })
+  const result = await res.json()
+  if (!res.ok) throw new Error(result.error || "Failed to parse resume")
+  return result
+}
