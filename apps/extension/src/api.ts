@@ -1,4 +1,4 @@
-const API_BASE = "http://localhost:5000/api"
+const API_BASE = "https://api-bidlyapp.melodyxpot.com/api"
 
 function getStorageData(key: string): Promise<any> {
   return new Promise((resolve) => {
