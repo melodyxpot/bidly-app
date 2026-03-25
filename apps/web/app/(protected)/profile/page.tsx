@@ -303,14 +303,12 @@ export default function ProfilePage() {
 
   const handleDownloadResume = async () => {
     try {
-      const res = await apiDownloadResume()
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
+      const { url, filename } = await apiDownloadResume()
       const a = document.createElement("a")
       a.href = url
-      a.download = profile.resumeFilename || "resume"
+      a.download = filename || profile.resumeFilename || "resume"
+      a.target = "_blank"
       a.click()
-      URL.revokeObjectURL(url)
     } catch (err: any) {
       toast.error(err.message)
     }

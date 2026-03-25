@@ -182,12 +182,19 @@ export async function apiUploadResume(file: File) {
 }
 
 export async function apiDownloadResume() {
-  const token = getToken()
-  const res = await fetch(`${API_BASE}/profile/resume`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  const res = await authFetch(`${API_BASE}/profile/resume`)
+  if (!res.ok) throw new Error("Failed to get resume")
+  return res.json()
+}
+
+export async function apiGenerateResume(data: { jobTitle: string; company: string; jobDescription: string }) {
+  const res = await authFetch(`${API_BASE}/profile/generate-resume`, {
+    method: "POST",
+    body: JSON.stringify(data),
   })
-  if (!res.ok) throw new Error("Failed to download resume")
-  return res
+  const result = await res.json()
+  if (!res.ok) throw new Error(result.error || "Failed to generate resume")
+  return result
 }
 
 export async function apiDeleteResume() {

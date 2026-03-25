@@ -80,3 +80,25 @@ export async function isLoggedIn(): Promise<boolean> {
 export async function getUser() {
   return getStorageData("bidly_user")
 }
+
+export async function getProfile() {
+  const res = await authFetch(`${API_BASE}/profile`)
+  if (!res.ok) throw new Error("Failed to fetch profile")
+  return res.json()
+}
+
+export async function getResumeInfo() {
+  const res = await authFetch(`${API_BASE}/profile/resume`)
+  if (!res.ok) throw new Error("No resume found")
+  return res.json()
+}
+
+export async function generateResume(data: { jobTitle: string; company: string; jobDescription: string }) {
+  const res = await authFetch(`${API_BASE}/profile/generate-resume`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  })
+  const result = await res.json()
+  if (!res.ok) throw new Error(result.error || "Failed to generate resume")
+  return result
+}

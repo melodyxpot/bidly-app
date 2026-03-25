@@ -5,6 +5,8 @@ import mammoth from "mammoth"
 import { generateText, Output } from "ai"
 import { createOpenAI } from "@ai-sdk/openai"
 import { z } from "zod"
+import { put, del } from "@vercel/blob"
+import PDFDocument from "pdfkit"
 import { authenticate, AuthRequest } from "../middleware/auth"
 import { Profile } from "../models/Profile"
 
@@ -26,11 +28,10 @@ const upload = multer({
 // GET /api/profile
 router.get("/", async (req: AuthRequest, res) => {
   try {
-    let profile = await Profile.findOne({ userId: req.userId }).select("-resumeData").lean()
+    let profile = await Profile.findOne({ userId: req.userId }).lean()
     if (!profile) {
       const created = await Profile.create({ userId: req.userId })
       profile = created.toObject() as any
-      delete (profile as any).resumeData
     }
     res.json({ profile })
   } catch (error) {
@@ -41,12 +42,12 @@ router.get("/", async (req: AuthRequest, res) => {
 // PUT /api/profile
 router.put("/", async (req: AuthRequest, res) => {
   try {
-    const { resumeData, resumeFilename, resumeMimeType, ...updateData } = req.body
+    const { resumeUrl, resumeFilename, ...updateData } = req.body
     const profile = await Profile.findOneAndUpdate(
       { userId: req.userId },
       { ...updateData, userId: req.userId },
       { new: true, upsert: true, runValidators: true }
-    ).select("-resumeData").lean()
+    ).lean()
     res.json({ profile })
   } catch (error) {
     res.status(500).json({ error: "Failed to update profile" })
@@ -60,21 +61,24 @@ router.post("/resume", upload.single("resume"), async (req: AuthRequest, res) =>
       return res.status(400).json({ error: "No file uploaded" })
     }
 
+    const blob = await put(`resumes/${req.userId}/${req.file.originalname}`, req.file.buffer, {
+      access: "public",
+      contentType: req.file.mimetype,
+    })
+
     await Profile.findOneAndUpdate(
       { userId: req.userId },
       {
         userId: req.userId,
         resumeFilename: req.file.originalname,
-        resumeData: req.file.buffer,
-        resumeMimeType: req.file.mimetype,
+        resumeUrl: blob.url,
       },
       { upsert: true }
     )
 
     res.json({
       filename: req.file.originalname,
-      size: req.file.size,
-      mimeType: req.file.mimetype,
+      url: blob.url,
     })
   } catch (error) {
     res.status(500).json({ error: "Failed to upload resume" })
@@ -84,27 +88,27 @@ router.post("/resume", upload.single("resume"), async (req: AuthRequest, res) =>
 // GET /api/profile/resume - Download resume
 router.get("/resume", async (req: AuthRequest, res) => {
   try {
-    const profile = await Profile.findOne({ userId: req.userId }).select("resumeData resumeFilename resumeMimeType")
-    if (!profile?.resumeData) {
+    const profile = await Profile.findOne({ userId: req.userId }).select("resumeUrl resumeFilename")
+    if (!profile?.resumeUrl) {
       return res.status(404).json({ error: "No resume found" })
     }
 
-    res.set({
-      "Content-Type": profile.resumeMimeType || "application/octet-stream",
-      "Content-Disposition": `attachment; filename="${profile.resumeFilename || "resume"}"`,
-    })
-    res.send(profile.resumeData)
+    res.json({ url: profile.resumeUrl, filename: profile.resumeFilename })
   } catch (error) {
-    res.status(500).json({ error: "Failed to download resume" })
+    res.status(500).json({ error: "Failed to get resume" })
   }
 })
 
 // DELETE /api/profile/resume - Delete resume
 router.delete("/resume", async (req: AuthRequest, res) => {
   try {
+    const profile = await Profile.findOne({ userId: req.userId }).select("resumeUrl")
+    if (profile?.resumeUrl) {
+      try { await del(profile.resumeUrl) } catch {}
+    }
     await Profile.findOneAndUpdate(
       { userId: req.userId },
-      { $unset: { resumeData: 1, resumeFilename: 1, resumeMimeType: 1 } }
+      { $unset: { resumeUrl: 1, resumeFilename: 1 } }
     )
     res.json({ success: true })
   } catch (error) {
@@ -134,13 +138,17 @@ router.post("/parse-resume", upload.single("resume"), async (req: AuthRequest, r
     }
 
     // Also save the resume file
+    const blob = await put(`resumes/${req.userId}/${req.file.originalname}`, req.file.buffer, {
+      access: "public",
+      contentType: req.file.mimetype,
+    })
+
     await Profile.findOneAndUpdate(
       { userId: req.userId },
       {
         userId: req.userId,
         resumeFilename: req.file.originalname,
-        resumeData: req.file.buffer,
-        resumeMimeType: req.file.mimetype,
+        resumeUrl: blob.url,
       },
       { upsert: true }
     )
@@ -207,6 +215,195 @@ router.post("/parse-resume", upload.single("resume"), async (req: AuthRequest, r
   } catch (error: any) {
     console.error("Resume parse error:", error)
     res.status(500).json({ error: error.message || "Failed to parse resume" })
+  }
+})
+
+// POST /api/profile/generate-resume - Generate custom resume for a job
+router.post("/generate-resume", async (req: AuthRequest, res) => {
+  try {
+    const { jobTitle, company, jobDescription } = req.body
+    if (!jobDescription) {
+      return res.status(400).json({ error: "Job description is required" })
+    }
+
+    const profile = await Profile.findOne({ userId: req.userId }).select("-generatedResumes")
+    if (!profile) {
+      return res.status(404).json({ error: "Profile not found" })
+    }
+
+    const profileData = {
+      firstName: profile.firstName,
+      lastName: profile.lastName,
+      email: profile.email,
+      phone: profile.phone,
+      address: profile.address,
+      city: profile.city,
+      state: profile.state,
+      zipCode: profile.zipCode,
+      country: profile.country,
+      linkedIn: profile.linkedIn,
+      github: profile.github,
+      portfolio: profile.portfolio,
+      summary: profile.summary,
+      education: profile.education,
+      experience: profile.experience,
+      projects: profile.projects,
+      skills: profile.skills,
+    }
+
+    const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY })
+    const modelId = process.env.AI_MODEL || "gpt-4o-mini"
+
+    const resumeContentSchema = z.object({
+      summary: z.string().describe("Professional summary tailored to the job"),
+      experience: z.array(z.object({
+        title: z.string(),
+        company: z.string(),
+        location: z.string(),
+        dates: z.string(),
+        bullets: z.array(z.string()),
+      })),
+      education: z.array(z.object({
+        degree: z.string(),
+        school: z.string(),
+        dates: z.string(),
+        details: z.string(),
+      })),
+      skills: z.array(z.string()),
+      projects: z.array(z.object({
+        name: z.string(),
+        description: z.string(),
+        technologies: z.string(),
+      })),
+    })
+
+    const result = await generateText({
+      model: openai(modelId),
+      experimental_output: Output.object({ schema: resumeContentSchema }),
+      system: `You are a professional resume writer. Given a candidate's profile and a job description, generate a tailored resume that highlights the most relevant experience, skills, and projects for the specific job. Rewrite bullet points to match the job requirements. Keep it concise and impactful.`,
+      prompt: `Candidate Profile:\n${JSON.stringify(profileData, null, 2)}\n\nJob Description:\n${jobDescription.substring(0, 10000)}`,
+    })
+
+    const content = result.experimental_output
+
+    // Generate PDF
+    const doc = new PDFDocument({ size: "LETTER", margins: { top: 50, bottom: 50, left: 50, right: 50 } })
+    const chunks: Buffer[] = []
+    doc.on("data", (chunk: Buffer) => chunks.push(chunk))
+
+    const pdfDone = new Promise<Buffer>((resolve) => {
+      doc.on("end", () => resolve(Buffer.concat(chunks)))
+    })
+
+    // Header
+    const fullName = `${profile.firstName} ${profile.lastName}`.trim()
+    doc.fontSize(20).font("Helvetica-Bold").text(fullName, { align: "center" })
+    const contactParts = [profile.email, profile.phone, profile.city && profile.state ? `${profile.city}, ${profile.state}` : ""].filter(Boolean)
+    if (contactParts.length) {
+      doc.fontSize(9).font("Helvetica").text(contactParts.join(" | "), { align: "center" })
+    }
+    const linkParts = [profile.linkedIn, profile.github, profile.portfolio].filter(Boolean)
+    if (linkParts.length) {
+      doc.fontSize(9).font("Helvetica").text(linkParts.join(" | "), { align: "center" })
+    }
+    doc.moveDown(0.5)
+
+    // Summary
+    if (content.summary) {
+      doc.fontSize(12).font("Helvetica-Bold").text("PROFESSIONAL SUMMARY")
+      doc.moveTo(50, doc.y).lineTo(562, doc.y).stroke()
+      doc.moveDown(0.3)
+      doc.fontSize(10).font("Helvetica").text(content.summary)
+      doc.moveDown(0.5)
+    }
+
+    // Experience
+    if (content.experience?.length) {
+      doc.fontSize(12).font("Helvetica-Bold").text("EXPERIENCE")
+      doc.moveTo(50, doc.y).lineTo(562, doc.y).stroke()
+      doc.moveDown(0.3)
+      for (const exp of content.experience) {
+        doc.fontSize(10).font("Helvetica-Bold").text(`${exp.title} — ${exp.company}`, { continued: false })
+        doc.fontSize(9).font("Helvetica").text(`${exp.location}  |  ${exp.dates}`)
+        for (const bullet of exp.bullets) {
+          doc.fontSize(10).font("Helvetica").text(`• ${bullet}`, { indent: 10 })
+        }
+        doc.moveDown(0.3)
+      }
+    }
+
+    // Education
+    if (content.education?.length) {
+      doc.fontSize(12).font("Helvetica-Bold").text("EDUCATION")
+      doc.moveTo(50, doc.y).lineTo(562, doc.y).stroke()
+      doc.moveDown(0.3)
+      for (const edu of content.education) {
+        doc.fontSize(10).font("Helvetica-Bold").text(edu.degree, { continued: false })
+        doc.fontSize(10).font("Helvetica").text(`${edu.school}  |  ${edu.dates}`)
+        if (edu.details) doc.fontSize(9).font("Helvetica").text(edu.details)
+        doc.moveDown(0.2)
+      }
+    }
+
+    // Skills
+    if (content.skills?.length) {
+      doc.fontSize(12).font("Helvetica-Bold").text("SKILLS")
+      doc.moveTo(50, doc.y).lineTo(562, doc.y).stroke()
+      doc.moveDown(0.3)
+      doc.fontSize(10).font("Helvetica").text(content.skills.join(", "))
+      doc.moveDown(0.5)
+    }
+
+    // Projects
+    if (content.projects?.length) {
+      doc.fontSize(12).font("Helvetica-Bold").text("PROJECTS")
+      doc.moveTo(50, doc.y).lineTo(562, doc.y).stroke()
+      doc.moveDown(0.3)
+      for (const proj of content.projects) {
+        doc.fontSize(10).font("Helvetica-Bold").text(proj.name)
+        if (proj.technologies) doc.fontSize(9).font("Helvetica").text(`Technologies: ${proj.technologies}`)
+        doc.fontSize(10).font("Helvetica").text(proj.description)
+        doc.moveDown(0.2)
+      }
+    }
+
+    doc.end()
+    const pdfBuffer = await pdfDone
+
+    // Upload to Vercel Blob
+    const timestamp = Date.now()
+    const safeCompany = (company || "unknown").replace(/[^a-zA-Z0-9]/g, "_")
+    const filename = `resume_${safeCompany}_${timestamp}.pdf`
+
+    const blob = await put(`generated-resumes/${req.userId}/${filename}`, pdfBuffer, {
+      access: "public",
+      contentType: "application/pdf",
+    })
+
+    // Save reference to profile
+    await Profile.findOneAndUpdate(
+      { userId: req.userId },
+      {
+        $push: {
+          generatedResumes: {
+            jobTitle: jobTitle || "",
+            company: company || "",
+            url: blob.url,
+            createdAt: new Date(),
+          },
+        },
+      }
+    )
+
+    res.json({
+      url: blob.url,
+      filename,
+      jobTitle,
+      company,
+    })
+  } catch (error: any) {
+    console.error("Generate resume error:", error)
+    res.status(500).json({ error: error.message || "Failed to generate resume" })
   }
 })
 

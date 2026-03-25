@@ -27,6 +27,13 @@ export interface IProject {
   technologies?: string
 }
 
+export interface IGeneratedResume {
+  jobTitle: string
+  company: string
+  url: string
+  createdAt: Date
+}
+
 export interface IEqualEmployment {
   authorizedToWork?: string
   disability?: string
@@ -58,8 +65,7 @@ export interface IProfile extends Document {
   summary?: string
   // Resume file
   resumeFilename?: string
-  resumeData?: Buffer
-  resumeMimeType?: string
+  resumeUrl?: string
   // Education
   education: IEducation[]
   // Experience
@@ -68,6 +74,8 @@ export interface IProfile extends Document {
   projects: IProject[]
   // Skills
   skills: string[]
+  // Generated Resumes
+  generatedResumes: IGeneratedResume[]
   // Equal Employment
   equalEmployment: IEqualEmployment
   createdAt: Date
@@ -101,6 +109,13 @@ const projectSchema = new Schema<IProject>({
   technologies: { type: String },
 }, { _id: true })
 
+const generatedResumeSchema = new Schema<IGeneratedResume>({
+  jobTitle: { type: String, default: "" },
+  company: { type: String, default: "" },
+  url: { type: String, required: true },
+  createdAt: { type: Date, default: Date.now },
+}, { _id: true })
+
 const equalEmploymentSchema = new Schema<IEqualEmployment>({
   authorizedToWork: { type: String, default: "" },
   disability: { type: String, default: "" },
@@ -131,12 +146,12 @@ const profileSchema = new Schema<IProfile>(
     otherSocials: { type: String },
     summary: { type: String },
     resumeFilename: { type: String },
-    resumeData: { type: Buffer },
-    resumeMimeType: { type: String },
+    resumeUrl: { type: String },
     education: { type: [educationSchema], default: [] },
     experience: { type: [experienceSchema], default: [] },
     projects: { type: [projectSchema], default: [] },
     skills: { type: [String], default: [] },
+    generatedResumes: { type: [generatedResumeSchema], default: [] },
     equalEmployment: { type: equalEmploymentSchema, default: () => ({}) },
   },
   { timestamps: true }

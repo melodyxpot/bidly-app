@@ -1,9 +1,12 @@
 import { scrapeJobData } from "./scraper"
-import { login, logout, createApplication, isLoggedIn, getUser, getSettings } from "./api"
+import { detectFormFields, getProfileValue, fillField, attachFileToInput, DetectedField } from "./detector"
+import { login, logout, createApplication, isLoggedIn, getUser, getSettings, getProfile, getResumeInfo, generateResume } from "./api"
 
 let sidebarRoot: HTMLElement | null = null
 let fab: HTMLElement | null = null
 let isOpen = false
+let detectedFields: DetectedField[] = []
+let cachedProfile: any = null
 
 // Create floating action button on page load
 function createFab() {
@@ -125,8 +128,16 @@ function renderLogin() {
 async function renderMain(user: any) {
   if (!sidebarRoot) return
 
-  const scraped = scrapeJobData()
+  // Pre-fetch profile
+  try {
+    const result = await getProfile()
+    cachedProfile = result.profile
+  } catch {}
 
+  // Scan fields
+  detectedFields = detectFormFields()
+
+  const scraped = scrapeJobData()
   let settings: any = null
   try {
     const result = await getSettings()
@@ -135,12 +146,10 @@ async function renderMain(user: any) {
 
   const jobTypes = ["Full-time", "Part-time", "Contract", "Internship", "Freelance"]
   const workLocations = settings?.workLocationOptions || ["Remote", "Hybrid", "Onsite"]
-
   const now = new Date().toISOString().slice(0, 16)
   const followUpDate = new Date()
   followUpDate.setDate(followUpDate.getDate() + (settings?.followUpOffsetDays || 7))
   const followUp = followUpDate.toISOString().split("T")[0]
-
   const hasScraped = !!(scraped.title || scraped.company)
 
   sidebarRoot.innerHTML = `
@@ -153,10 +162,42 @@ async function renderMain(user: any) {
         <span class="bidly-user-email">${escapeHtml(user?.email || "User")}</span>
         <button class="bidly-signout-btn" id="bidly-logout">Sign Out</button>
       </div>
-      <div class="bidly-body">
-        ${hasScraped ? `<div class="bidly-scraped-bar">Scraped from page <span class="bidly-scraped-badge">Auto-detected</span></div>` : ""}
+      
+      <div class="bidly-tabs">
+        <button class="bidly-tab bidly-tab-active" data-tab="autofill">Auto-Fill</button>
+        <button class="bidly-tab" data-tab="save">Save Application</button>
+      </div>
+      
+      <div class="bidly-body" id="bidly-tab-autofill">
+        <div style="display:flex;gap:8px;margin-bottom:12px;">
+          <button class="bidly-btn bidly-btn-primary" id="bidly-autofill-all" style="flex:1">
+            ✨ Auto-fill All
+          </button>
+          <button class="bidly-btn bidly-btn-outline" id="bidly-scan" style="width:auto;padding:9px 14px" title="Re-scan fields">
+            🔄
+          </button>
+        </div>
+        
+        ${!cachedProfile ? '<div class="bidly-message bidly-message-error">Could not load profile. Please set up your profile first.</div>' : ''}
+        
+        <div class="bidly-field-count">${detectedFields.length} field${detectedFields.length !== 1 ? 's' : ''} detected</div>
+        
+        <div id="bidly-fields-list">
+          ${renderFieldsList(detectedFields)}
+        </div>
+        
+        <div class="bidly-divider"></div>
+        
+        <div class="bidly-section-title">Custom Resume</div>
+        <p style="font-size:11px;color:#888;margin:0 0 8px">Generate a resume tailored to this job posting</p>
+        <button class="bidly-btn bidly-btn-secondary" id="bidly-generate-resume">📄 Generate Custom Resume</button>
+        <div id="bidly-generate-result"></div>
+      </div>
+      
+      <div class="bidly-body" id="bidly-tab-save" style="display:none">
+        ${hasScraped ? '<div class="bidly-scraped-bar">Scraped from page <span class="bidly-scraped-badge">Auto-detected</span></div>' : ''}
         <div id="bidly-message-area"></div>
-
+        
         <div class="bidly-form-group">
           <label>Company *</label>
           <input type="text" id="bidly-company" value="${escapeHtml(scraped.company)}" />
@@ -169,12 +210,10 @@ async function renderMain(user: any) {
           <label>Job Link</label>
           <input type="url" id="bidly-link" value="${escapeHtml(scraped.link)}" />
         </div>
-
         <div class="bidly-form-group">
           <label>Platform</label>
           <input type="text" id="bidly-platform" value="${escapeHtml(scraped.platform)}" />
         </div>
-
         <div class="bidly-form-row">
           <div class="bidly-form-group">
             <label>Job Type</label>
@@ -191,14 +230,11 @@ async function renderMain(user: any) {
             </select>
           </div>
         </div>
-
         <div class="bidly-form-group">
           <label>Location</label>
           <input type="text" id="bidly-location" value="${escapeHtml(scraped.location)}" />
         </div>
-
         <div class="bidly-divider"></div>
-
         <div class="bidly-form-row">
           <div class="bidly-form-group">
             <label>Applied Date</label>
@@ -209,12 +245,10 @@ async function renderMain(user: any) {
             <input type="date" id="bidly-followup" value="${followUp}" />
           </div>
         </div>
-
         <div class="bidly-form-group">
           <label>Notes</label>
           <textarea id="bidly-notes" rows="2" placeholder="Optional notes..."></textarea>
         </div>
-
         <button class="bidly-btn bidly-btn-primary" id="bidly-save">Save Application</button>
       </div>
     </div>
@@ -222,55 +256,187 @@ async function renderMain(user: any) {
 
   bindClose()
 
+  // Tab switching
+  const tabs = sidebarRoot.querySelectorAll(".bidly-tab")
+  tabs.forEach(tab => {
+    tab.addEventListener("click", () => {
+      tabs.forEach(t => t.classList.remove("bidly-tab-active"))
+      tab.classList.add("bidly-tab-active")
+      const tabName = tab.getAttribute("data-tab")
+      const autofillTab = sidebarRoot!.querySelector("#bidly-tab-autofill") as HTMLElement
+      const saveTab = sidebarRoot!.querySelector("#bidly-tab-save") as HTMLElement
+      if (tabName === "autofill") {
+        autofillTab.style.display = ""
+        saveTab.style.display = "none"
+      } else {
+        autofillTab.style.display = "none"
+        saveTab.style.display = ""
+      }
+    })
+  })
+
+  // Logout
   sidebarRoot.querySelector("#bidly-logout")!.addEventListener("click", async () => {
     await logout()
     renderSidebar()
   })
 
-  const saveBtn = sidebarRoot.querySelector("#bidly-save") as HTMLButtonElement
-  saveBtn.addEventListener("click", async () => {
-    const company = (sidebarRoot!.querySelector("#bidly-company") as HTMLInputElement).value.trim()
-    const title = (sidebarRoot!.querySelector("#bidly-title") as HTMLInputElement).value.trim()
-    const msgArea = sidebarRoot!.querySelector("#bidly-message-area") as HTMLElement
+  // Scan button
+  sidebarRoot.querySelector("#bidly-scan")?.addEventListener("click", () => {
+    detectedFields = detectFormFields()
+    const listEl = sidebarRoot!.querySelector("#bidly-fields-list")
+    if (listEl) listEl.innerHTML = renderFieldsList(detectedFields)
+    const countEl = sidebarRoot!.querySelector(".bidly-field-count")
+    if (countEl) countEl.textContent = `${detectedFields.length} field${detectedFields.length !== 1 ? 's' : ''} detected`
+  })
 
-    if (!company || !title) {
-      msgArea.innerHTML = `<div class="bidly-message bidly-message-error">Company and job title are required.</div>`
-      return
+  // Auto-fill all button
+  sidebarRoot.querySelector("#bidly-autofill-all")?.addEventListener("click", async () => {
+    if (!cachedProfile) return
+
+    const btn = sidebarRoot!.querySelector("#bidly-autofill-all") as HTMLButtonElement
+    btn.disabled = true
+    btn.textContent = "Filling..."
+
+    for (const field of detectedFields) {
+      if (field.filled || !field.profileKey) continue
+
+      if (field.profileKey === "resumeFile" || field.profileKey === "coverLetterFile") {
+        try {
+          const resumeInfo = await getResumeInfo()
+          if (resumeInfo.url) {
+            const success = await attachFileToInput(
+              field.element as HTMLInputElement,
+              resumeInfo.url,
+              resumeInfo.filename || "resume.pdf"
+            )
+            if (success) field.filled = true
+          }
+        } catch {}
+      } else {
+        const value = getProfileValue(cachedProfile, field.profileKey)
+        if (value) {
+          const success = fillField(field, value)
+          if (success) field.filled = true
+        }
+      }
     }
 
-    saveBtn.disabled = true
-    saveBtn.textContent = "Saving..."
-    msgArea.innerHTML = ""
+    // Update the fields list UI
+    const listEl = sidebarRoot!.querySelector("#bidly-fields-list")
+    if (listEl) listEl.innerHTML = renderFieldsList(detectedFields)
+
+    btn.disabled = false
+    btn.textContent = "✨ Auto-fill All"
+  })
+
+  // Generate custom resume
+  sidebarRoot.querySelector("#bidly-generate-resume")?.addEventListener("click", async () => {
+    const btn = sidebarRoot!.querySelector("#bidly-generate-resume") as HTMLButtonElement
+    const resultDiv = sidebarRoot!.querySelector("#bidly-generate-result") as HTMLElement
+
+    btn.disabled = true
+    btn.textContent = "Generating..."
+    resultDiv.innerHTML = '<div style="font-size:11px;color:#888;margin-top:8px">⏳ AI is generating your custom resume...</div>'
 
     try {
-      await createApplication({
-        company,
-        title,
-        link: (sidebarRoot!.querySelector("#bidly-link") as HTMLInputElement).value || null,
-        platform: (sidebarRoot!.querySelector("#bidly-platform") as HTMLInputElement).value || "Other",
-        status: settings?.defaultStatus || "Applied",
-        jobType: (sidebarRoot!.querySelector("#bidly-jobtype") as HTMLSelectElement).value || null,
-        workLocation: (sidebarRoot!.querySelector("#bidly-worklocation") as HTMLSelectElement).value || null,
-        location: (sidebarRoot!.querySelector("#bidly-location") as HTMLInputElement).value || null,
-        appliedAt: new Date((sidebarRoot!.querySelector("#bidly-appliedat") as HTMLInputElement).value).toISOString(),
-        followUpAt: (sidebarRoot!.querySelector("#bidly-followup") as HTMLInputElement).value
-          ? new Date((sidebarRoot!.querySelector("#bidly-followup") as HTMLInputElement).value).toISOString()
-          : null,
-        notes: (sidebarRoot!.querySelector("#bidly-notes") as HTMLTextAreaElement).value || null,
+      const scraped = scrapeJobData()
+      const jobDescription = document.body.innerText.substring(0, 15000)
+
+      const result = await generateResume({
+        jobTitle: scraped.title,
+        company: scraped.company,
+        jobDescription,
       })
 
-      msgArea.innerHTML = `<div class="bidly-message bidly-message-success">✓ Application saved!</div>`
-      saveBtn.textContent = "Saved!"
-      setTimeout(() => {
+      resultDiv.innerHTML = `
+        <div class="bidly-message bidly-message-success" style="margin-top:8px">
+          ✓ Resume generated!
+          <a href="${escapeHtml(result.url)}" target="_blank" download="${escapeHtml(result.filename)}" 
+             style="display:block;margin-top:6px;color:#1e40af;font-weight:600;text-decoration:underline">
+            📥 Download Resume
+          </a>
+        </div>
+      `
+    } catch (err: any) {
+      resultDiv.innerHTML = `<div class="bidly-message bidly-message-error" style="margin-top:8px">${escapeHtml(err.message)}</div>`
+    }
+
+    btn.disabled = false
+    btn.textContent = "📄 Generate Custom Resume"
+  })
+
+  // Save application
+  const saveBtn = sidebarRoot.querySelector("#bidly-save") as HTMLButtonElement
+  if (saveBtn) {
+    saveBtn.addEventListener("click", async () => {
+      const company = (sidebarRoot!.querySelector("#bidly-company") as HTMLInputElement).value.trim()
+      const title = (sidebarRoot!.querySelector("#bidly-title") as HTMLInputElement).value.trim()
+      const msgArea = sidebarRoot!.querySelector("#bidly-message-area") as HTMLElement
+
+      if (!company || !title) {
+        msgArea.innerHTML = '<div class="bidly-message bidly-message-error">Company and job title are required.</div>'
+        return
+      }
+
+      saveBtn.disabled = true
+      saveBtn.textContent = "Saving..."
+      msgArea.innerHTML = ""
+
+      try {
+        await createApplication({
+          company,
+          title,
+          link: (sidebarRoot!.querySelector("#bidly-link") as HTMLInputElement).value || null,
+          platform: (sidebarRoot!.querySelector("#bidly-platform") as HTMLInputElement).value || "Other",
+          status: settings?.defaultStatus || "Applied",
+          jobType: (sidebarRoot!.querySelector("#bidly-jobtype") as HTMLSelectElement).value || null,
+          workLocation: (sidebarRoot!.querySelector("#bidly-worklocation") as HTMLSelectElement).value || null,
+          location: (sidebarRoot!.querySelector("#bidly-location") as HTMLInputElement).value || null,
+          appliedAt: new Date((sidebarRoot!.querySelector("#bidly-appliedat") as HTMLInputElement).value).toISOString(),
+          followUpAt: (sidebarRoot!.querySelector("#bidly-followup") as HTMLInputElement).value
+            ? new Date((sidebarRoot!.querySelector("#bidly-followup") as HTMLInputElement).value).toISOString()
+            : null,
+          notes: (sidebarRoot!.querySelector("#bidly-notes") as HTMLTextAreaElement).value || null,
+        })
+
+        msgArea.innerHTML = '<div class="bidly-message bidly-message-success">✓ Application saved!</div>'
+        saveBtn.textContent = "Saved!"
+        setTimeout(() => {
+          saveBtn.disabled = false
+          saveBtn.textContent = "Save Application"
+        }, 2000)
+      } catch (err: any) {
+        msgArea.innerHTML = `<div class="bidly-message bidly-message-error">${escapeHtml(err.message)}</div>`
         saveBtn.disabled = false
         saveBtn.textContent = "Save Application"
-      }, 2000)
-    } catch (err: any) {
-      msgArea.innerHTML = `<div class="bidly-message bidly-message-error">${escapeHtml(err.message)}</div>`
-      saveBtn.disabled = false
-      saveBtn.textContent = "Save Application"
-    }
-  })
+      }
+    })
+  }
+}
+
+function renderFieldsList(fields: DetectedField[]): string {
+  if (fields.length === 0) {
+    return '<div style="font-size:12px;color:#888;text-align:center;padding:20px 0">No form fields detected on this page.<br>Navigate to a job application form and click 🔄</div>'
+  }
+
+  return fields.map(f => {
+    const matched = f.profileKey !== null
+    const statusIcon = f.filled ? "✅" : (matched ? "⬜" : "❌")
+    const labelClass = f.filled ? "bidly-field-label bidly-field-filled" : "bidly-field-label"
+    const typeLabel = f.type === "file" ? "📎 file" : f.type === "checkbox" ? "☑ check" : f.type === "select" ? "▾ select" : "✎ text"
+    const matchDot = matched ? '<span class="bidly-match-dot"></span>' : '<span class="bidly-unmatch-dot"></span>'
+
+    return `
+      <div class="bidly-field-row">
+        <span class="bidly-field-status">${statusIcon}</span>
+        <div class="bidly-field-info">
+          <span class="${labelClass}">${escapeHtml(f.label)}</span>
+          <span class="bidly-field-type">${typeLabel} ${matchDot}</span>
+        </div>
+      </div>
+    `
+  }).join("")
 }
 
 function bindClose() {
