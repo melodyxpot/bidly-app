@@ -102,3 +102,13 @@ export async function generateResume(data: { jobTitle: string; company: string; 
   if (!res.ok) throw new Error(result.error || "Failed to generate resume")
   return result
 }
+
+export async function detectFieldsWithAI(fields: { label: string; type: string; name: string; id: string }[]) {
+  const res = await authFetch(`${API_BASE}/profile/detect-fields`, {
+    method: "POST",
+    body: JSON.stringify({ fields }),
+  })
+  const result = await res.json()
+  if (!res.ok) throw new Error(result.error || "Failed to detect fields")
+  return result
+}

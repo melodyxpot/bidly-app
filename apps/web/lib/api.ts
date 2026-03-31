@@ -217,3 +217,90 @@ export async function apiParseResume(file: File) {
   if (!res.ok) throw new Error(result.error || "Failed to parse resume")
   return result
 }
+
+// Teams
+export async function apiGetTeams() {
+  const res = await authFetch(`${API_BASE}/teams`)
+  if (!res.ok) throw new Error("Failed to fetch teams")
+  return res.json()
+}
+
+export async function apiCreateTeam(name: string) {
+  const res = await authFetch(`${API_BASE}/teams`, {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  })
+  const result = await res.json()
+  if (!res.ok) throw new Error(result.error || "Failed to create team")
+  return result
+}
+
+export async function apiGetTeam(id: string) {
+  const res = await authFetch(`${API_BASE}/teams/${id}`)
+  if (!res.ok) throw new Error("Failed to fetch team")
+  return res.json()
+}
+
+export async function apiUpdateTeam(id: string, name: string) {
+  const res = await authFetch(`${API_BASE}/teams/${id}`, {
+    method: "PUT",
+    body: JSON.stringify({ name }),
+  })
+  const result = await res.json()
+  if (!res.ok) throw new Error(result.error || "Failed to update team")
+  return result
+}
+
+export async function apiDeleteTeam(id: string) {
+  const res = await authFetch(`${API_BASE}/teams/${id}`, { method: "DELETE" })
+  const result = await res.json()
+  if (!res.ok) throw new Error(result.error || "Failed to delete team")
+  return result
+}
+
+export async function apiAddTeamMember(teamId: string, email: string, role = "member") {
+  const res = await authFetch(`${API_BASE}/teams/${teamId}/members`, {
+    method: "POST",
+    body: JSON.stringify({ email, role }),
+  })
+  const result = await res.json()
+  if (!res.ok) throw new Error(result.error || "Failed to add member")
+  return result
+}
+
+export async function apiChangeTeamRole(teamId: string, userId: string, role: string) {
+  const res = await authFetch(`${API_BASE}/teams/${teamId}/members/${userId}/role`, {
+    method: "PUT",
+    body: JSON.stringify({ role }),
+  })
+  const result = await res.json()
+  if (!res.ok) throw new Error(result.error || "Failed to change role")
+  return result
+}
+
+export async function apiRemoveTeamMember(teamId: string, userId: string) {
+  const res = await authFetch(`${API_BASE}/teams/${teamId}/members/${userId}`, { method: "DELETE" })
+  const result = await res.json()
+  if (!res.ok) throw new Error(result.error || "Failed to remove member")
+  return result
+}
+
+export async function apiLeaveTeam(teamId: string) {
+  const res = await authFetch(`${API_BASE}/teams/${teamId}/leave`, { method: "POST" })
+  const result = await res.json()
+  if (!res.ok) throw new Error(result.error || "Failed to leave team")
+  return result
+}
+
+export async function apiGetTeamDashboard(teamId: string, days = 14) {
+  const res = await authFetch(`${API_BASE}/teams/${teamId}/dashboard?days=${days}`)
+  if (!res.ok) throw new Error("Failed to fetch team dashboard")
+  return res.json()
+}
+
+export async function apiGetTeamApplications(teamId: string, params: Record<string, string> = {}) {
+  const query = new URLSearchParams(params).toString()
+  const res = await authFetch(`${API_BASE}/teams/${teamId}/applications?${query}`)
+  if (!res.ok) throw new Error("Failed to fetch team applications")
+  return res.json()
+}

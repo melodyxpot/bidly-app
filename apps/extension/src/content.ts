@@ -169,6 +169,13 @@ async function renderMain(user: any) {
       </div>
       
       <div class="bidly-body" id="bidly-tab-autofill">
+        <div class="bidly-section-title">Custom Resume</div>
+        <p style="font-size:11px;color:#888;margin:0 0 8px">Generate an ATS-optimized resume tailored to this job</p>
+        <button class="bidly-btn bidly-btn-secondary" id="bidly-generate-resume" style="margin-bottom:4px">📄 Generate Custom Resume</button>
+        <div id="bidly-generate-result"></div>
+        
+        <div class="bidly-divider"></div>
+        
         <div style="display:flex;gap:8px;margin-bottom:12px;">
           <button class="bidly-btn bidly-btn-primary" id="bidly-autofill-all" style="flex:1">
             ✨ Auto-fill All
@@ -185,13 +192,6 @@ async function renderMain(user: any) {
         <div id="bidly-fields-list">
           ${renderFieldsList(detectedFields)}
         </div>
-        
-        <div class="bidly-divider"></div>
-        
-        <div class="bidly-section-title">Custom Resume</div>
-        <p style="font-size:11px;color:#888;margin:0 0 8px">Generate a resume tailored to this job posting</p>
-        <button class="bidly-btn bidly-btn-secondary" id="bidly-generate-resume">📄 Generate Custom Resume</button>
-        <div id="bidly-generate-result"></div>
       </div>
       
       <div class="bidly-body" id="bidly-tab-save" style="display:none">

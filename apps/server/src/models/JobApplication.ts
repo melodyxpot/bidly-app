@@ -13,6 +13,7 @@ export interface IJobApplication extends Document {
   workLocation: string | null
   jobType: string | null
   notes: string | null
+  resume: string | null
   createdAt: Date
   updatedAt: Date
 }
@@ -31,6 +32,7 @@ const jobApplicationSchema = new Schema<IJobApplication>(
     workLocation: { type: String, default: null },
     jobType: { type: String, default: null },
     notes: { type: String, default: null },
+    resume: { type: String, default: null },
   },
   { timestamps: true }
 )

@@ -280,7 +280,19 @@ router.post("/generate-resume", async (req: AuthRequest, res) => {
     const result = await generateText({
       model: openai(modelId),
       experimental_output: Output.object({ schema: resumeContentSchema }),
-      system: `You are a professional resume writer. Given a candidate's profile and a job description, generate a tailored resume that highlights the most relevant experience, skills, and projects for the specific job. Rewrite bullet points to match the job requirements. Keep it concise and impactful.`,
+      system: `You are an expert ATS (Applicant Tracking System) resume writer. Generate a tailored, ATS-optimized resume designed to pass automated screening systems used by major job application platforms like Workday (myworkday.com), Greenhouse, Lever, iCIMS, Taleo, and BambooHR.
+
+Key ATS optimization rules:
+- Use standard section headings: "Professional Summary", "Experience", "Education", "Skills", "Projects"
+- Include relevant keywords from the job description naturally in experience bullets and summary
+- Use reverse chronological order for experience and education
+- Write clear, quantified achievement bullets (use metrics, percentages, dollar amounts where possible)
+- Match job title keywords and required skills exactly as they appear in the job posting
+- Keep formatting simple - no tables, columns, or graphics (plain text structure)
+- Include both spelled-out and abbreviated forms of technical terms (e.g., "Machine Learning (ML)")
+- Prioritize hard skills and technical competencies that match the job requirements
+- Tailor the professional summary to directly address the role's key requirements
+- Keep it concise: ideally 1 page, max 2 pages`,
       prompt: `Candidate Profile:\n${JSON.stringify(profileData, null, 2)}\n\nJob Description:\n${jobDescription.substring(0, 10000)}`,
     })
 
@@ -371,9 +383,11 @@ router.post("/generate-resume", async (req: AuthRequest, res) => {
     const pdfBuffer = await pdfDone
 
     // Upload to Vercel Blob
-    const timestamp = Date.now()
-    const safeCompany = (company || "unknown").replace(/[^a-zA-Z0-9]/g, "_")
-    const filename = `resume_${safeCompany}_${timestamp}.pdf`
+    const now = new Date()
+    const dateStr = now.toISOString().replace(/[:.]/g, "-").slice(0, 19)
+    const safeTitle = (jobTitle || "resume").replace(/[^a-zA-Z0-9 ]/g, "").replace(/\s+/g, "_").substring(0, 30)
+    const safeCompany = (company || "unknown").replace(/[^a-zA-Z0-9 ]/g, "").replace(/\s+/g, "_").substring(0, 20)
+    const filename = `${safeTitle}_${safeCompany}_${dateStr}.pdf`
 
     const blob = await put(`generated-resumes/${req.userId}/${filename}`, pdfBuffer, {
       access: "public",
@@ -404,6 +418,53 @@ router.post("/generate-resume", async (req: AuthRequest, res) => {
   } catch (error: any) {
     console.error("Generate resume error:", error)
     res.status(500).json({ error: error.message || "Failed to generate resume" })
+  }
+})
+
+// POST /api/profile/detect-fields - AI-powered field detection
+router.post("/detect-fields", async (req: AuthRequest, res) => {
+  try {
+    const { fields } = req.body
+    if (!fields?.length) {
+      return res.status(400).json({ error: "No fields provided" })
+    }
+
+    const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY })
+    const modelId = process.env.AI_MODEL || "gpt-4o-mini"
+
+    const result = await generateText({
+      model: openai(modelId),
+      system: `You are a form field analyzer. Given a list of form fields from a job application page, map each field to the correct profile data key. Return a JSON array where each item has "index" (0-based) and "profileKey" (the mapped key or null if unknown).
+
+Valid profileKey values:
+- Personal: "firstName", "lastName", "fullName", "email", "phone", "address", "city", "state", "zipCode", "country"
+- Links: "linkedIn", "github", "portfolio"
+- Professional: "summary"
+- Files: "resumeFile", "coverLetterFile"
+- Equal Employment: "ee.authorizedToWork", "ee.disability", "ee.gender", "ee.requireSponsorship", "ee.lgbtq", "ee.veteran", "ee.race", "ee.hispanicOrLatino", "ee.sexualOrientation"
+- null if you cannot determine what the field is for
+
+Return ONLY a JSON array like: [{"index":0,"profileKey":"firstName"},{"index":1,"profileKey":null}]`,
+      prompt: JSON.stringify(fields.slice(0, 50).map((f: any, i: number) => ({
+        index: i,
+        label: f.label,
+        type: f.type,
+        name: f.name,
+        id: f.id,
+      }))),
+    })
+
+    let mappings: any[] = []
+    try {
+      const text = result.text
+      const jsonMatch = text.match(/\[[\s\S]*\]/)
+      if (jsonMatch) mappings = JSON.parse(jsonMatch[0])
+    } catch {}
+
+    res.json({ mappings })
+  } catch (error: any) {
+    console.error("Field detection error:", error)
+    res.status(500).json({ error: error.message || "Failed to detect fields" })
   }
 })
 

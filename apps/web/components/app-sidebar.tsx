@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Briefcase, LayoutDashboard, FileText, Settings, LogOut, Plus, ClipboardPaste, User } from "lucide-react"
+import { Briefcase, LayoutDashboard, FileText, Settings, LogOut, Plus, ClipboardPaste, User, Users } from "lucide-react"
 import {
   Sidebar,
   SidebarContent,
@@ -29,6 +29,7 @@ const navItems = [
   { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { title: "Applications", href: "/applications", icon: FileText },
   { title: "My Profile", href: "/profile", icon: User },
+  { title: "Team", href: "/team", icon: Users },
   { title: "Settings", href: "/settings", icon: Settings },
 ]
 
