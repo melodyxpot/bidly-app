@@ -1,12 +1,13 @@
 import { scrapeJobData } from "./scraper"
 import { detectFormFields, getProfileValue, fillField, attachFileToInput, DetectedField } from "./detector"
-import { login, logout, createApplication, isLoggedIn, getUser, getSettings, getProfile, getResumeInfo, generateResume, generateAnswer } from "./api"
+import { login, logout, createApplication, isLoggedIn, getUser, getSettings, getProfile, getResumeInfo, generateResume, generateAnswer, getExtensionSettings, setExtensionSettings } from "./api"
 
 let sidebarRoot: HTMLElement | null = null
 let fab: HTMLElement | null = null
 let isOpen = false
 let detectedFields: DetectedField[] = []
 let cachedProfile: any = null
+let extSettings: { autofillEnabled: boolean } = { autofillEnabled: true }
 
 // Create floating action button on page load
 function createFab() {
@@ -128,10 +129,13 @@ function renderLogin() {
 async function renderMain(user: any) {
   if (!sidebarRoot) return
 
-  // Pre-fetch profile
+  // Pre-fetch profile and extension settings
   try {
     const result = await getProfile()
     cachedProfile = result.profile
+  } catch {}
+  try {
+    extSettings = await getExtensionSettings()
   } catch {}
 
   // Scan fields
@@ -165,7 +169,8 @@ async function renderMain(user: any) {
       
       <div class="bidly-tabs">
         <button class="bidly-tab bidly-tab-active" data-tab="autofill">Auto-Fill</button>
-        <button class="bidly-tab" data-tab="save">Save Application</button>
+        <button class="bidly-tab" data-tab="save">Save Job</button>
+        <button class="bidly-tab" data-tab="settings">⚙️</button>
       </div>
       
       <div class="bidly-body" id="bidly-tab-autofill">
@@ -176,6 +181,7 @@ async function renderMain(user: any) {
         
         <div class="bidly-divider"></div>
         
+        ${extSettings.autofillEnabled ? `
         <div style="display:flex;gap:8px;margin-bottom:12px;">
           <button class="bidly-btn bidly-btn-primary" id="bidly-autofill-all" style="flex:1">
             ✨ Auto-fill All
@@ -192,6 +198,7 @@ async function renderMain(user: any) {
         <div id="bidly-fields-list">
           ${renderFieldsList(detectedFields)}
         </div>
+        ` : '<div style="font-size:12px;color:#888;text-align:center;padding:20px 0">Auto-fill is disabled.<br>Enable it in Settings (⚙️) tab.</div>'}
       </div>
       
       <div class="bidly-body" id="bidly-tab-save" style="display:none">
@@ -251,6 +258,21 @@ async function renderMain(user: any) {
         </div>
         <button class="bidly-btn bidly-btn-primary" id="bidly-save">Save Application</button>
       </div>
+      
+      <div class="bidly-body" id="bidly-tab-settings" style="display:none">
+        <div class="bidly-section-title" style="margin-bottom:16px">Extension Settings</div>
+        
+        <div class="bidly-settings-row">
+          <div>
+            <div style="font-size:13px;font-weight:600;color:#171717">Auto-Fill</div>
+            <div style="font-size:11px;color:#888;margin-top:2px">Automatically detect form fields and show the auto-fill panel</div>
+          </div>
+          <label class="bidly-toggle">
+            <input type="checkbox" id="bidly-setting-autofill" ${extSettings.autofillEnabled ? "checked" : ""} />
+            <span class="bidly-toggle-slider"></span>
+          </label>
+        </div>
+      </div>
     </div>
   `
 
@@ -258,22 +280,27 @@ async function renderMain(user: any) {
 
   // Tab switching
   const tabs = sidebarRoot.querySelectorAll(".bidly-tab")
+  const allTabPanels = ["#bidly-tab-autofill", "#bidly-tab-save", "#bidly-tab-settings"]
   tabs.forEach(tab => {
     tab.addEventListener("click", () => {
       tabs.forEach(t => t.classList.remove("bidly-tab-active"))
       tab.classList.add("bidly-tab-active")
       const tabName = tab.getAttribute("data-tab")
-      const autofillTab = sidebarRoot!.querySelector("#bidly-tab-autofill") as HTMLElement
-      const saveTab = sidebarRoot!.querySelector("#bidly-tab-save") as HTMLElement
-      if (tabName === "autofill") {
-        autofillTab.style.display = ""
-        saveTab.style.display = "none"
-      } else {
-        autofillTab.style.display = "none"
-        saveTab.style.display = ""
-      }
+      allTabPanels.forEach(id => {
+        const panel = sidebarRoot!.querySelector(id) as HTMLElement
+        if (panel) panel.style.display = id === `#bidly-tab-${tabName}` ? "" : "none"
+      })
     })
   })
+
+  // Settings toggles
+  const autofillToggle = sidebarRoot.querySelector("#bidly-setting-autofill") as HTMLInputElement
+  if (autofillToggle) {
+    autofillToggle.addEventListener("change", async () => {
+      extSettings.autofillEnabled = autofillToggle.checked
+      await setExtensionSettings(extSettings)
+    })
+  }
 
   // Logout
   sidebarRoot.querySelector("#bidly-logout")!.addEventListener("click", async () => {

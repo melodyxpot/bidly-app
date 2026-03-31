@@ -18,6 +18,12 @@ import { DEFAULT_STATUSES, DEFAULT_PLATFORMS } from "@/lib/types"
 import { toast } from "sonner"
 import { Loader2, AlertCircle, CheckCircle2, Copy, Trash2 } from "lucide-react"
 
+function toLocalDateTimeString(date: Date): string {
+  const offset = date.getTimezoneOffset()
+  const local = new Date(date.getTime() - offset * 60000)
+  return local.toISOString().slice(0, 16)
+}
+
 interface QuickPasteModalProps {
   open: boolean
   settings: Settings | null
@@ -38,7 +44,7 @@ export function QuickPasteModal({ open, settings }: QuickPasteModalProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [rawText, setRawText] = useState("")
   const [format, setFormat] = useState<ParseFormat>("pipe")
-  const [appliedAt, setAppliedAt] = useState(new Date().toISOString().slice(0, 16))
+  const [appliedAt, setAppliedAt] = useState(toLocalDateTimeString(new Date()))
   const [platform, setPlatform] = useState(settings?.defaultPlatform || "LinkedIn")
   const [status, setStatus] = useState(settings?.defaultStatus || "Applied")
   const [followUpDays, setFollowUpDays] = useState(settings?.followUpOffsetDays || 7)

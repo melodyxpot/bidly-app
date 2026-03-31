@@ -122,3 +122,12 @@ export async function generateAnswer(data: { question: string; jobTitle: string;
   if (!res.ok) throw new Error(result.error || "Failed to generate answer")
   return result
 }
+
+export async function getExtensionSettings(): Promise<{ autofillEnabled: boolean }> {
+  const data = await getStorageData("bidly_ext_settings")
+  return data || { autofillEnabled: true }
+}
+
+export async function setExtensionSettings(settings: { autofillEnabled: boolean }): Promise<void> {
+  await setStorageData("bidly_ext_settings", settings)
+}

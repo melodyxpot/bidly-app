@@ -280,26 +280,27 @@ router.post("/generate-resume", async (req: AuthRequest, res) => {
     const result = await generateText({
       model: openai(modelId),
       experimental_output: Output.object({ schema: resumeContentSchema }),
-      system: `You are an expert ATS (Applicant Tracking System) resume writer. Generate a tailored, ATS-optimized resume designed to pass automated screening systems used by major job application platforms like Workday (myworkday.com), Greenhouse, Lever, iCIMS, Taleo, and BambooHR.
+      system: `You are an expert ATS resume writer creating a resume that will score 100% match against the job description. Your goal is maximum keyword alignment and relevance.
 
-Key ATS optimization rules:
-- Use standard section headings: "Professional Summary", "Experience", "Education", "Skills", "Projects"
-- Include relevant keywords from the job description naturally in experience bullets and summary
-- Use reverse chronological order for experience and education
-- Write clear, quantified achievement bullets (use metrics, percentages, dollar amounts where possible)
-- Match job title keywords and required skills exactly as they appear in the job posting
-- Keep formatting simple - no tables, columns, or graphics (plain text structure)
-- Include both spelled-out and abbreviated forms of technical terms (e.g., "Machine Learning (ML)")
-- Prioritize hard skills and technical competencies that match the job requirements
-- Tailor the professional summary to directly address the role's key requirements
-- Keep it concise: ideally 1 page, max 2 pages`,
+CRITICAL RULES — follow these exactly:
+1. SUMMARY: Write 2-3 sentences that mirror the exact job title and top 3-4 requirements from the posting. If the job says "Senior React Developer with 5+ years", the summary must say something like "Senior React Developer with X years of experience..."
+2. SKILLS: Extract EVERY technical skill, tool, framework, language, and methodology mentioned in the job description. Include them ALL in the skills section. Use the EXACT same terms the job posting uses (e.g., if they say "CI/CD" don't write "continuous integration").
+3. EXPERIENCE: Rewrite each bullet point to naturally incorporate keywords from the job requirements. Every bullet should demonstrate a skill or responsibility mentioned in the job description. Use strong action verbs and include metrics (numbers, percentages, dollar values).
+4. KEYWORD MATCHING: If the job mentions a technology or skill and the candidate has any related experience, find a way to include that exact keyword. For example, if the job requires "Kubernetes" and the candidate used Docker, mention both.
+5. ORDER: Put the most job-relevant experience first. Lead with bullets that match the top requirements.
+6. FORMAT: Use standard ATS headings only: "Professional Summary", "Experience", "Education", "Skills", "Projects". No fancy formatting.
+7. TAILORING: The professional summary and experience descriptions must read as if the candidate is a perfect fit for THIS specific role. Customize everything — nothing should be generic.
+8. CONCISENESS: Keep it to 1 page if possible. Every word must earn its place.`,
       prompt: `Candidate Profile:\n${JSON.stringify(profileData, null, 2)}\n\nJob Description:\n${jobDescription.substring(0, 10000)}`,
     })
 
     const content = result.experimental_output
 
-    // Generate PDF
-    const doc = new PDFDocument({ size: "LETTER", margins: { top: 50, bottom: 50, left: 50, right: 50 } })
+    // Generate PDF with professional styling
+    const doc = new PDFDocument({
+      size: "LETTER",
+      margins: { top: 40, bottom: 40, left: 55, right: 55 },
+    })
     const chunks: Buffer[] = []
     doc.on("data", (chunk: Buffer) => chunks.push(chunk))
 
@@ -307,75 +308,119 @@ Key ATS optimization rules:
       doc.on("end", () => resolve(Buffer.concat(chunks)))
     })
 
-    // Header
-    const fullName = `${profile.firstName} ${profile.lastName}`.trim()
-    doc.fontSize(20).font("Helvetica-Bold").text(fullName, { align: "center" })
-    const contactParts = [profile.email, profile.phone, profile.city && profile.state ? `${profile.city}, ${profile.state}` : ""].filter(Boolean)
-    if (contactParts.length) {
-      doc.fontSize(9).font("Helvetica").text(contactParts.join(" | "), { align: "center" })
+    const pageWidth = 612 - 55 - 55 // LETTER width minus margins
+    const lineY = () => doc.y
+
+    function drawSectionLine() {
+      const y = lineY()
+      doc.save()
+      doc.moveTo(55, y).lineTo(55 + pageWidth, y).lineWidth(0.75).strokeColor("#333333").stroke()
+      doc.restore()
+      doc.moveDown(0.35)
     }
+
+    // === HEADER ===
+    const fullName = `${profile.firstName} ${profile.lastName}`.trim()
+    if (fullName) {
+      doc.fontSize(22).font("Helvetica-Bold").fillColor("#1a1a1a").text(fullName, { align: "center" })
+      doc.moveDown(0.15)
+    }
+
+    // Contact line
+    const contactParts = [
+      profile.email,
+      profile.phone,
+      [profile.city, profile.state].filter(Boolean).join(", "),
+    ].filter(Boolean)
+    if (contactParts.length) {
+      doc.fontSize(9.5).font("Helvetica").fillColor("#444444").text(contactParts.join("  •  "), { align: "center" })
+    }
+
+    // Links line
     const linkParts = [profile.linkedIn, profile.github, profile.portfolio].filter(Boolean)
     if (linkParts.length) {
-      doc.fontSize(9).font("Helvetica").text(linkParts.join(" | "), { align: "center" })
+      doc.fontSize(9).font("Helvetica").fillColor("#555555").text(linkParts.join("  •  "), { align: "center" })
     }
+
+    doc.moveDown(0.6)
+    doc.moveTo(55, lineY()).lineTo(55 + pageWidth, lineY()).lineWidth(1.5).strokeColor("#1a1a1a").stroke()
     doc.moveDown(0.5)
 
-    // Summary
+    // === PROFESSIONAL SUMMARY ===
     if (content.summary) {
-      doc.fontSize(12).font("Helvetica-Bold").text("PROFESSIONAL SUMMARY")
-      doc.moveTo(50, doc.y).lineTo(562, doc.y).stroke()
-      doc.moveDown(0.3)
-      doc.fontSize(10).font("Helvetica").text(content.summary)
-      doc.moveDown(0.5)
+      doc.fontSize(11).font("Helvetica-Bold").fillColor("#1a1a1a").text("PROFESSIONAL SUMMARY")
+      drawSectionLine()
+      doc.fontSize(9.5).font("Helvetica").fillColor("#333333").text(content.summary, { lineGap: 2 })
+      doc.moveDown(0.6)
     }
 
-    // Experience
+    // === EXPERIENCE ===
     if (content.experience?.length) {
-      doc.fontSize(12).font("Helvetica-Bold").text("EXPERIENCE")
-      doc.moveTo(50, doc.y).lineTo(562, doc.y).stroke()
-      doc.moveDown(0.3)
-      for (const exp of content.experience) {
-        doc.fontSize(10).font("Helvetica-Bold").text(`${exp.title} — ${exp.company}`, { continued: false })
-        doc.fontSize(9).font("Helvetica").text(`${exp.location}  |  ${exp.dates}`)
+      doc.fontSize(11).font("Helvetica-Bold").fillColor("#1a1a1a").text("EXPERIENCE")
+      drawSectionLine()
+      for (let i = 0; i < content.experience.length; i++) {
+        const exp = content.experience[i]
+        // Title and company on one line, dates on the right
+        const titleText = `${exp.title}`
+        const companyText = exp.company
+        const datesText = exp.dates || ""
+        const locationText = exp.location || ""
+
+        doc.fontSize(10).font("Helvetica-Bold").fillColor("#1a1a1a").text(titleText, { continued: false })
+        
+        const metaParts = [companyText, locationText, datesText].filter(Boolean)
+        doc.fontSize(9).font("Helvetica").fillColor("#555555").text(metaParts.join("  |  "))
+        doc.moveDown(0.15)
+
         for (const bullet of exp.bullets) {
-          doc.fontSize(10).font("Helvetica").text(`• ${bullet}`, { indent: 10 })
+          doc.fontSize(9.5).font("Helvetica").fillColor("#333333").text(`•  ${bullet}`, {
+            indent: 8,
+            lineGap: 1.5,
+          })
         }
-        doc.moveDown(0.3)
+        if (i < content.experience.length - 1) doc.moveDown(0.45)
       }
+      doc.moveDown(0.6)
     }
 
-    // Education
-    if (content.education?.length) {
-      doc.fontSize(12).font("Helvetica-Bold").text("EDUCATION")
-      doc.moveTo(50, doc.y).lineTo(562, doc.y).stroke()
-      doc.moveDown(0.3)
-      for (const edu of content.education) {
-        doc.fontSize(10).font("Helvetica-Bold").text(edu.degree, { continued: false })
-        doc.fontSize(10).font("Helvetica").text(`${edu.school}  |  ${edu.dates}`)
-        if (edu.details) doc.fontSize(9).font("Helvetica").text(edu.details)
-        doc.moveDown(0.2)
-      }
-    }
-
-    // Skills
+    // === SKILLS ===
     if (content.skills?.length) {
-      doc.fontSize(12).font("Helvetica-Bold").text("SKILLS")
-      doc.moveTo(50, doc.y).lineTo(562, doc.y).stroke()
-      doc.moveDown(0.3)
-      doc.fontSize(10).font("Helvetica").text(content.skills.join(", "))
-      doc.moveDown(0.5)
+      doc.fontSize(11).font("Helvetica-Bold").fillColor("#1a1a1a").text("SKILLS")
+      drawSectionLine()
+      doc.fontSize(9.5).font("Helvetica").fillColor("#333333").text(content.skills.join("  •  "), { lineGap: 2 })
+      doc.moveDown(0.6)
     }
 
-    // Projects
+    // === EDUCATION ===
+    if (content.education?.length) {
+      doc.fontSize(11).font("Helvetica-Bold").fillColor("#1a1a1a").text("EDUCATION")
+      drawSectionLine()
+      for (let i = 0; i < content.education.length; i++) {
+        const edu = content.education[i]
+        doc.fontSize(10).font("Helvetica-Bold").fillColor("#1a1a1a").text(edu.degree)
+        const eduMeta = [edu.school, edu.dates].filter(Boolean)
+        doc.fontSize(9).font("Helvetica").fillColor("#555555").text(eduMeta.join("  |  "))
+        if (edu.details) {
+          doc.moveDown(0.1)
+          doc.fontSize(9).font("Helvetica").fillColor("#444444").text(edu.details, { lineGap: 1 })
+        }
+        if (i < content.education.length - 1) doc.moveDown(0.3)
+      }
+      doc.moveDown(0.6)
+    }
+
+    // === PROJECTS ===
     if (content.projects?.length) {
-      doc.fontSize(12).font("Helvetica-Bold").text("PROJECTS")
-      doc.moveTo(50, doc.y).lineTo(562, doc.y).stroke()
-      doc.moveDown(0.3)
-      for (const proj of content.projects) {
-        doc.fontSize(10).font("Helvetica-Bold").text(proj.name)
-        if (proj.technologies) doc.fontSize(9).font("Helvetica").text(`Technologies: ${proj.technologies}`)
-        doc.fontSize(10).font("Helvetica").text(proj.description)
-        doc.moveDown(0.2)
+      doc.fontSize(11).font("Helvetica-Bold").fillColor("#1a1a1a").text("PROJECTS")
+      drawSectionLine()
+      for (let i = 0; i < content.projects.length; i++) {
+        const proj = content.projects[i]
+        doc.fontSize(10).font("Helvetica-Bold").fillColor("#1a1a1a").text(proj.name)
+        if (proj.technologies) {
+          doc.fontSize(8.5).font("Helvetica").fillColor("#666666").text(proj.technologies)
+        }
+        doc.fontSize(9.5).font("Helvetica").fillColor("#333333").text(proj.description, { lineGap: 1.5 })
+        if (i < content.projects.length - 1) doc.moveDown(0.3)
       }
     }
 

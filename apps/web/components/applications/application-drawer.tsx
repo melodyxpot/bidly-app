@@ -17,6 +17,18 @@ import { DEFAULT_STATUSES, DEFAULT_PLATFORMS, JOB_TYPES, LOCATIONS, WORK_LOCATIO
 import { toast } from "sonner"
 import { Loader2 } from "lucide-react"
 
+function toLocalDateTimeString(date: Date): string {
+  const offset = date.getTimezoneOffset()
+  const local = new Date(date.getTime() - offset * 60000)
+  return local.toISOString().slice(0, 16)
+}
+
+function toLocalDateString(date: Date): string {
+  const offset = date.getTimezoneOffset()
+  const local = new Date(date.getTime() - offset * 60000)
+  return local.toISOString().split("T")[0]
+}
+
 interface ApplicationDrawerProps {
   open: boolean
   editId?: string
@@ -56,7 +68,7 @@ export function ApplicationDrawer({ open, editId, settings }: ApplicationDrawerP
       link: "",
       platform: defaultPlatform,
       status: defaultStatus,
-      appliedAt: new Date().toISOString().slice(0, 16),
+      appliedAt: toLocalDateTimeString(new Date()),
       followUpAt: getDefaultFollowUp(new Date().toISOString()),
       location: defaultLocation,
       workLocation: "Remote",
@@ -85,8 +97,8 @@ export function ApplicationDrawer({ open, editId, settings }: ApplicationDrawerP
             link: app.link || "",
             platform: app.platform,
             status: app.status,
-            appliedAt: new Date(app.appliedAt).toISOString().slice(0, 16),
-            followUpAt: app.followUpAt ? new Date(app.followUpAt).toISOString().split("T")[0] : "",
+            appliedAt: toLocalDateTimeString(new Date(app.appliedAt)),
+            followUpAt: app.followUpAt ? toLocalDateString(new Date(app.followUpAt)) : "",
             location: app.location || "",
             workLocation: app.workLocation || "Remote",
             jobType: app.jobType || "",
@@ -102,7 +114,7 @@ export function ApplicationDrawer({ open, editId, settings }: ApplicationDrawerP
         link: "",
         platform: defaultPlatform,
         status: defaultStatus,
-        appliedAt: new Date().toISOString().slice(0, 16),
+        appliedAt: toLocalDateTimeString(new Date()),
         followUpAt: getDefaultFollowUp(new Date().toISOString()),
         location: defaultLocation,
         workLocation: "Remote",
@@ -158,7 +170,7 @@ export function ApplicationDrawer({ open, editId, settings }: ApplicationDrawerP
             link: "",
             platform: defaultPlatform,
             status: defaultStatus,
-            appliedAt: new Date().toISOString().slice(0, 16),
+            appliedAt: toLocalDateTimeString(new Date()),
             followUpAt: getDefaultFollowUp(new Date().toISOString()),
             location: defaultLocation,
             workLocation: "Remote",
