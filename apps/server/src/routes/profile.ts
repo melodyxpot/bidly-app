@@ -468,4 +468,38 @@ Return ONLY a JSON array like: [{"index":0,"profileKey":"firstName"},{"index":1,
   }
 })
 
+// POST /api/profile/generate-answer - Generate AI answer for custom job questions
+router.post("/generate-answer", async (req: AuthRequest, res) => {
+  try {
+    const { question, jobTitle, company, jobDescription } = req.body
+    if (!question) {
+      return res.status(400).json({ error: "Question is required" })
+    }
+
+    const profile = await Profile.findOne({ userId: req.userId }).select("-resumeData -generatedResumes").lean()
+
+    const profileSummary = profile ? [
+      profile.firstName && profile.lastName ? `Name: ${profile.firstName} ${profile.lastName}` : "",
+      profile.summary ? `Summary: ${profile.summary}` : "",
+      profile.experience?.length ? `Experience: ${profile.experience.map((e: any) => `${e.title} at ${e.company}`).join(", ")}` : "",
+      profile.education?.length ? `Education: ${profile.education.map((e: any) => `${e.degree} in ${e.field} from ${e.school}`).join(", ")}` : "",
+      profile.skills?.length ? `Skills: ${profile.skills.join(", ")}` : "",
+    ].filter(Boolean).join("\n") : ""
+
+    const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY })
+    const modelId = process.env.AI_MODEL || "gpt-4o-mini"
+
+    const result = await generateText({
+      model: openai(modelId),
+      system: `You are helping a job applicant answer application questions. Write concise, natural, human-sounding answers — not robotic or overly formal. The tone should be professional but conversational, like a real person wrote it. Keep answers brief (2-4 sentences for short questions, up to a paragraph for longer ones). Use first person. Don't use buzzwords or clichés. Be specific and reference the candidate's actual experience where relevant.`,
+      prompt: `Candidate profile:\n${profileSummary || "No profile available"}\n\n${jobTitle ? `Job: ${jobTitle}` : ""}${company ? ` at ${company}` : ""}\n${jobDescription ? `\nJob context (excerpt):\n${jobDescription.substring(0, 3000)}` : ""}\n\nQuestion: "${question}"\n\nWrite a natural, human-sounding answer:`,
+    })
+
+    res.json({ answer: result.text.trim() })
+  } catch (error: any) {
+    console.error("Generate answer error:", error)
+    res.status(500).json({ error: error.message || "Failed to generate answer" })
+  }
+})
+
 export { router as profileRouter }

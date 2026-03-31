@@ -17,6 +17,7 @@
     "start:server": "pnpm --filter server start"
   },
   "devDependencies": {
+    "baseline-browser-mapping": "^2.10.12",
     "turbo": "^2.5.0"
   },
   "packageManager": "pnpm@9.15.0"

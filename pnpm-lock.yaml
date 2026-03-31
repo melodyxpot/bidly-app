@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      baseline-browser-mapping:
+        specifier: ^2.10.12
+        version: 2.10.12
       turbo:
         specifier: ^2.5.0
         version: 2.8.20
@@ -1840,6 +1843,11 @@ packages:
 
   baseline-browser-mapping@2.10.10:
     resolution: {integrity: sha512-sUoJ3IMxx4AyRqO4MLeHlnGDkyXRoUG0/AI9fjK+vS72ekpV0yWVY7O0BVjmBcRtkNcsAO2QDZ4tdKKGoI6YaQ==}
+    engines: {node: '>=6.0.0'}
+    hasBin: true
+
+  baseline-browser-mapping@2.10.12:
+    resolution: {integrity: sha512-qyq26DxfY4awP2gIRXhhLWfwzwI+N5Nxk6iQi8EFizIaWIjqicQTE4sLnZZVdeKPRcVNoJOkkpfzoIYuvCKaIQ==}
     engines: {node: '>=6.0.0'}
     hasBin: true
 
@@ -4843,6 +4851,8 @@ snapshots:
   base64-js@1.5.1: {}
 
   baseline-browser-mapping@2.10.10: {}
+
+  baseline-browser-mapping@2.10.12: {}
 
   bcryptjs@2.4.3: {}
 

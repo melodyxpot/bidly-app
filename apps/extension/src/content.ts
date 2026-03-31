@@ -1,6 +1,6 @@
 import { scrapeJobData } from "./scraper"
 import { detectFormFields, getProfileValue, fillField, attachFileToInput, DetectedField } from "./detector"
-import { login, logout, createApplication, isLoggedIn, getUser, getSettings, getProfile, getResumeInfo, generateResume } from "./api"
+import { login, logout, createApplication, isLoggedIn, getUser, getSettings, getProfile, getResumeInfo, generateResume, generateAnswer } from "./api"
 
 let sidebarRoot: HTMLElement | null = null
 let fab: HTMLElement | null = null
@@ -286,6 +286,7 @@ async function renderMain(user: any) {
     detectedFields = detectFormFields()
     const listEl = sidebarRoot!.querySelector("#bidly-fields-list")
     if (listEl) listEl.innerHTML = renderFieldsList(detectedFields)
+    bindAIButtons()
     const countEl = sidebarRoot!.querySelector(".bidly-field-count")
     if (countEl) countEl.textContent = `${detectedFields.length} field${detectedFields.length !== 1 ? 's' : ''} detected`
   })
@@ -325,6 +326,7 @@ async function renderMain(user: any) {
     // Update the fields list UI
     const listEl = sidebarRoot!.querySelector("#bidly-fields-list")
     if (listEl) listEl.innerHTML = renderFieldsList(detectedFields)
+    bindAIButtons()
 
     btn.disabled = false
     btn.textContent = "✨ Auto-fill All"
@@ -413,6 +415,22 @@ async function renderMain(user: any) {
       }
     })
   }
+
+  // Bind AI buttons for initial render
+  bindAIButtons()
+}
+
+function isCustomQuestion(field: DetectedField): boolean {
+  if (field.profileKey) return false
+  if (field.type !== "text" && field.type !== "textarea") return false
+  const label = field.label.toLowerCase()
+  // Skip generic unlabeled fields
+  if (label.startsWith("unlabeled")) return false
+  // Consider it a question if label is long enough to be a question or contains question words
+  if (label.length > 20) return true
+  if (label.includes("?")) return true
+  if (label.match(/^(why|how|what|describe|tell|explain|please|are you|do you|have you|would you|can you)/)) return true
+  return false
 }
 
 function renderFieldsList(fields: DetectedField[]): string {
@@ -420,20 +438,27 @@ function renderFieldsList(fields: DetectedField[]): string {
     return '<div style="font-size:12px;color:#888;text-align:center;padding:20px 0">No form fields detected on this page.<br>Navigate to a job application form and click 🔄</div>'
   }
 
-  return fields.map(f => {
+  return fields.map((f, idx) => {
     const matched = f.profileKey !== null
-    const statusIcon = f.filled ? "✅" : (matched ? "⬜" : "❌")
+    const isQuestion = isCustomQuestion(f)
+    const statusIcon = f.filled ? "✅" : (matched ? "⬜" : (isQuestion ? "💬" : "❌"))
     const labelClass = f.filled ? "bidly-field-label bidly-field-filled" : "bidly-field-label"
-    const typeLabel = f.type === "file" ? "📎 file" : f.type === "checkbox" ? "☑ check" : f.type === "select" ? "▾ select" : "✎ text"
-    const matchDot = matched ? '<span class="bidly-match-dot"></span>' : '<span class="bidly-unmatch-dot"></span>'
+    const typeLabel = f.type === "file" ? "📎 file" : f.type === "checkbox" ? "☑ check" : f.type === "radio" ? "◉ radio" : f.type === "select" ? "▾ select" : "✎ text"
+    const matchDot = matched ? '<span class="bidly-match-dot"></span>' : (isQuestion ? '<span class="bidly-match-dot" style="background:#f59e0b"></span>' : '<span class="bidly-unmatch-dot"></span>')
+
+    const rowClass = isQuestion ? "bidly-field-row bidly-field-row-question" : "bidly-field-row"
+    const aiBtn = isQuestion && !f.filled
+      ? `<div class="bidly-field-actions"><button class="bidly-ai-btn" data-field-idx="${idx}" title="Generate AI answer">✨ AI</button></div>`
+      : ""
 
     return `
-      <div class="bidly-field-row">
+      <div class="${rowClass}">
         <span class="bidly-field-status">${statusIcon}</span>
         <div class="bidly-field-info">
           <span class="${labelClass}">${escapeHtml(f.label)}</span>
           <span class="bidly-field-type">${typeLabel} ${matchDot}</span>
         </div>
+        ${aiBtn}
       </div>
     `
   }).join("")
@@ -441,6 +466,60 @@ function renderFieldsList(fields: DetectedField[]): string {
 
 function bindClose() {
   sidebarRoot?.querySelector("#bidly-close")?.addEventListener("click", closeSidebar)
+}
+
+function bindAIButtons() {
+  if (!sidebarRoot) return
+  const btns = sidebarRoot.querySelectorAll<HTMLButtonElement>(".bidly-ai-btn")
+  btns.forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation()
+      const idx = parseInt(btn.getAttribute("data-field-idx") || "-1")
+      if (idx < 0 || idx >= detectedFields.length) return
+
+      const field = detectedFields[idx]
+      const scraped = scrapeJobData()
+      const jobDescription = document.body.innerText.substring(0, 8000)
+
+      btn.disabled = true
+      btn.classList.add("bidly-ai-btn-generating")
+      btn.textContent = "⏳..."
+
+      try {
+        const { answer } = await generateAnswer({
+          question: field.label,
+          jobTitle: scraped.title,
+          company: scraped.company,
+          jobDescription,
+        })
+
+        if (answer) {
+          const { fillField } = await import("./detector")
+          const success = fillField(field, answer)
+          if (success) field.filled = true
+
+          // Update UI
+          const listEl = sidebarRoot!.querySelector("#bidly-fields-list")
+          if (listEl) {
+            listEl.innerHTML = renderFieldsList(detectedFields)
+            bindAIButtons()
+          }
+        }
+      } catch (err: any) {
+        btn.textContent = "❌ Error"
+        setTimeout(() => {
+          btn.textContent = "✨ AI"
+          btn.classList.remove("bidly-ai-btn-generating")
+          btn.disabled = false
+        }, 2000)
+        return
+      }
+
+      btn.disabled = false
+      btn.classList.remove("bidly-ai-btn-generating")
+      btn.textContent = "✨ AI"
+    })
+  })
 }
 
 function showError(el: HTMLElement, msg: string) {

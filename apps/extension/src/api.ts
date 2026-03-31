@@ -112,3 +112,13 @@ export async function detectFieldsWithAI(fields: { label: string; type: string; 
   if (!res.ok) throw new Error(result.error || "Failed to detect fields")
   return result
 }
+
+export async function generateAnswer(data: { question: string; jobTitle: string; company: string; jobDescription: string }) {
+  const res = await authFetch(`${API_BASE}/profile/generate-answer`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  })
+  const result = await res.json()
+  if (!res.ok) throw new Error(result.error || "Failed to generate answer")
+  return result
+}
