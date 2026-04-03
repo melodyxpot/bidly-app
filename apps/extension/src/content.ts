@@ -1,13 +1,14 @@
 import { scrapeJobData } from "./scraper"
 import { detectFormFields, getProfileValue, fillField, attachFileToInput, DetectedField } from "./detector"
-import { login, logout, createApplication, isLoggedIn, getUser, getSettings, getProfile, getResumeInfo, generateResume, generateAnswer, getExtensionSettings, setExtensionSettings } from "./api"
+import { login, logout, createApplication, isLoggedIn, getUser, getSettings, getProfile, getResumeInfo, generateResume, generateAnswer, getExtensionSettings, setExtensionSettings, generateCoverLetter, ExtSettings } from "./api"
 
 let sidebarRoot: HTMLElement | null = null
 let fab: HTMLElement | null = null
 let isOpen = false
 let detectedFields: DetectedField[] = []
 let cachedProfile: any = null
-let extSettings: { autofillEnabled: boolean } = { autofillEnabled: true }
+let extSettings: ExtSettings = { autofillEnabled: true, saveResumeInApp: false }
+let lastGeneratedResumeUrl: string | null = null
 
 // Create floating action button on page load
 function createFab() {
@@ -179,6 +180,13 @@ async function renderMain(user: any) {
         <button class="bidly-btn bidly-btn-secondary" id="bidly-generate-resume" style="margin-bottom:4px">📄 Generate Custom Resume</button>
         <div id="bidly-generate-result"></div>
         
+        <div style="margin-top:8px">
+          <div class="bidly-section-title">Cover Letter</div>
+          <p style="font-size:11px;color:#888;margin:0 0 8px">Generate a cover letter tailored to this job</p>
+          <button class="bidly-btn bidly-btn-secondary" id="bidly-generate-cover-letter" style="margin-bottom:4px">✉️ Generate Cover Letter</button>
+          <div id="bidly-cover-letter-result"></div>
+        </div>
+        
         <div class="bidly-divider"></div>
         
         ${extSettings.autofillEnabled ? `
@@ -196,9 +204,14 @@ async function renderMain(user: any) {
         <div class="bidly-field-count">${detectedFields.length} field${detectedFields.length !== 1 ? 's' : ''} detected</div>
         
         <div id="bidly-fields-list">
-          ${renderFieldsList(detectedFields)}
+          ${renderFieldsList(detectedFields, false)}
         </div>
-        ` : '<div style="font-size:12px;color:#888;text-align:center;padding:20px 0">Auto-fill is disabled.<br>Enable it in Settings (⚙️) tab.</div>'}
+        ` : `
+        <div id="bidly-fields-list">
+          ${renderFieldsList(detectedFields, true)}
+        </div>
+        ${detectedFields.filter(f => isCustomQuestion(f)).length === 0 ? '<div style="font-size:12px;color:#888;text-align:center;padding:12px 0">Auto-fill is disabled. Enable it in Settings (⚙️).</div>' : ''}
+        `}
       </div>
       
       <div class="bidly-body" id="bidly-tab-save" style="display:none">
@@ -265,10 +278,21 @@ async function renderMain(user: any) {
         <div class="bidly-settings-row">
           <div>
             <div style="font-size:13px;font-weight:600;color:#171717">Auto-Fill</div>
-            <div style="font-size:11px;color:#888;margin-top:2px">Automatically detect form fields and show the auto-fill panel</div>
+            <div style="font-size:11px;color:#888;margin-top:2px">Detect form fields and show the auto-fill panel</div>
           </div>
           <label class="bidly-toggle">
             <input type="checkbox" id="bidly-setting-autofill" ${extSettings.autofillEnabled ? "checked" : ""} />
+            <span class="bidly-toggle-slider"></span>
+          </label>
+        </div>
+        
+        <div class="bidly-settings-row">
+          <div>
+            <div style="font-size:13px;font-weight:600;color:#171717">Save Resume in Application</div>
+            <div style="font-size:11px;color:#888;margin-top:2px">Save generated resume URL when saving a job application</div>
+          </div>
+          <label class="bidly-toggle">
+            <input type="checkbox" id="bidly-setting-save-resume" ${extSettings.saveResumeInApp ? "checked" : ""} />
             <span class="bidly-toggle-slider"></span>
           </label>
         </div>
@@ -301,6 +325,13 @@ async function renderMain(user: any) {
       await setExtensionSettings(extSettings)
     })
   }
+  const saveResumeToggle = sidebarRoot.querySelector("#bidly-setting-save-resume") as HTMLInputElement
+  if (saveResumeToggle) {
+    saveResumeToggle.addEventListener("change", async () => {
+      extSettings.saveResumeInApp = saveResumeToggle.checked
+      await setExtensionSettings(extSettings)
+    })
+  }
 
   // Logout
   sidebarRoot.querySelector("#bidly-logout")!.addEventListener("click", async () => {
@@ -312,7 +343,7 @@ async function renderMain(user: any) {
   sidebarRoot.querySelector("#bidly-scan")?.addEventListener("click", () => {
     detectedFields = detectFormFields()
     const listEl = sidebarRoot!.querySelector("#bidly-fields-list")
-    if (listEl) listEl.innerHTML = renderFieldsList(detectedFields)
+    if (listEl) listEl.innerHTML = renderFieldsList(detectedFields, !extSettings.autofillEnabled)
     bindAIButtons()
     const countEl = sidebarRoot!.querySelector(".bidly-field-count")
     if (countEl) countEl.textContent = `${detectedFields.length} field${detectedFields.length !== 1 ? 's' : ''} detected`
@@ -352,7 +383,7 @@ async function renderMain(user: any) {
 
     // Update the fields list UI
     const listEl = sidebarRoot!.querySelector("#bidly-fields-list")
-    if (listEl) listEl.innerHTML = renderFieldsList(detectedFields)
+    if (listEl) listEl.innerHTML = renderFieldsList(detectedFields, !extSettings.autofillEnabled)
     bindAIButtons()
 
     btn.disabled = false
@@ -378,6 +409,7 @@ async function renderMain(user: any) {
         jobDescription,
       })
 
+      lastGeneratedResumeUrl = result.url
       resultDiv.innerHTML = `
         <div class="bidly-message bidly-message-success" style="margin-top:8px">
           ✓ Resume generated!
@@ -393,6 +425,47 @@ async function renderMain(user: any) {
 
     btn.disabled = false
     btn.textContent = "📄 Generate Custom Resume"
+  })
+
+  // Generate cover letter
+  sidebarRoot.querySelector("#bidly-generate-cover-letter")?.addEventListener("click", async () => {
+    const btn = sidebarRoot!.querySelector("#bidly-generate-cover-letter") as HTMLButtonElement
+    const resultDiv = sidebarRoot!.querySelector("#bidly-cover-letter-result") as HTMLElement
+
+    btn.disabled = true
+    btn.textContent = "Generating..."
+    resultDiv.innerHTML = '<div style="font-size:11px;color:#888;margin-top:8px">⏳ AI is writing your cover letter...</div>'
+
+    try {
+      const scraped = scrapeJobData()
+      const jobDescription = document.body.innerText.substring(0, 12000)
+
+      const result = await generateCoverLetter({
+        jobTitle: scraped.title,
+        company: scraped.company,
+        jobDescription,
+      })
+
+      resultDiv.innerHTML = `
+        <div class="bidly-message bidly-message-success" style="margin-top:8px">
+          ✓ Cover letter generated!
+          <div style="margin-top:8px;padding:10px;background:#f9fafb;border:1px solid #e5e5e5;border-radius:6px;font-size:12px;line-height:1.6;color:#333;max-height:200px;overflow-y:auto;white-space:pre-wrap">${escapeHtml(result.coverLetter)}</div>
+          <button class="bidly-btn bidly-btn-outline" id="bidly-copy-cover-letter" style="margin-top:8px;font-size:12px">📋 Copy to Clipboard</button>
+        </div>
+      `
+
+      sidebarRoot!.querySelector("#bidly-copy-cover-letter")?.addEventListener("click", () => {
+        navigator.clipboard.writeText(result.coverLetter)
+        const copyBtn = sidebarRoot!.querySelector("#bidly-copy-cover-letter") as HTMLButtonElement
+        copyBtn.textContent = "✓ Copied!"
+        setTimeout(() => { copyBtn.textContent = "📋 Copy to Clipboard" }, 2000)
+      })
+    } catch (err: any) {
+      resultDiv.innerHTML = `<div class="bidly-message bidly-message-error" style="margin-top:8px">${escapeHtml(err.message)}</div>`
+    }
+
+    btn.disabled = false
+    btn.textContent = "✉️ Generate Cover Letter"
   })
 
   // Save application
@@ -427,6 +500,7 @@ async function renderMain(user: any) {
             ? new Date((sidebarRoot!.querySelector("#bidly-followup") as HTMLInputElement).value).toISOString()
             : null,
           notes: (sidebarRoot!.querySelector("#bidly-notes") as HTMLTextAreaElement).value || null,
+          resume: extSettings.saveResumeInApp && lastGeneratedResumeUrl ? lastGeneratedResumeUrl : null,
         })
 
         msgArea.innerHTML = '<div class="bidly-message bidly-message-success">✓ Application saved!</div>'
@@ -460,12 +534,18 @@ function isCustomQuestion(field: DetectedField): boolean {
   return false
 }
 
-function renderFieldsList(fields: DetectedField[]): string {
+function renderFieldsList(fields: DetectedField[], questionsOnly = false): string {
   if (fields.length === 0) {
     return '<div style="font-size:12px;color:#888;text-align:center;padding:20px 0">No form fields detected on this page.<br>Navigate to a job application form and click 🔄</div>'
   }
 
-  return fields.map((f, idx) => {
+  const filtered = questionsOnly ? fields.filter(f => isCustomQuestion(f)) : fields
+  if (filtered.length === 0 && questionsOnly) {
+    return ''
+  }
+
+  return filtered.map((f) => {
+    const idx = fields.indexOf(f)
     const matched = f.profileKey !== null
     const isQuestion = isCustomQuestion(f)
     const statusIcon = f.filled ? "✅" : (matched ? "⬜" : (isQuestion ? "💬" : "❌"))

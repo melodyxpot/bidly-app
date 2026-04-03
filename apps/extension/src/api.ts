@@ -123,11 +123,26 @@ export async function generateAnswer(data: { question: string; jobTitle: string;
   return result
 }
 
-export async function getExtensionSettings(): Promise<{ autofillEnabled: boolean }> {
-  const data = await getStorageData("bidly_ext_settings")
-  return data || { autofillEnabled: true }
+export interface ExtSettings {
+  autofillEnabled: boolean
+  saveResumeInApp: boolean
 }
 
-export async function setExtensionSettings(settings: { autofillEnabled: boolean }): Promise<void> {
+export async function getExtensionSettings(): Promise<ExtSettings> {
+  const data = await getStorageData("bidly_ext_settings")
+  return { autofillEnabled: true, saveResumeInApp: false, ...data }
+}
+
+export async function setExtensionSettings(settings: ExtSettings): Promise<void> {
   await setStorageData("bidly_ext_settings", settings)
+}
+
+export async function generateCoverLetter(data: { jobTitle: string; company: string; jobDescription: string }) {
+  const res = await authFetch(`${API_BASE}/profile/generate-cover-letter`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  })
+  const result = await res.json()
+  if (!res.ok) throw new Error(result.error || "Failed to generate cover letter")
+  return result
 }

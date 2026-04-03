@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Card, CardContent } from "@/components/ui/card"
-import { ArrowUpDown, MoreHorizontal, ExternalLink, Pencil, Trash2, Search, X, AlertCircle } from "lucide-react"
+import { ArrowUpDown, MoreHorizontal, ExternalLink, Pencil, Trash2, Search, X, AlertCircle, FileDown } from "lucide-react"
 import { apiGetApplications, apiDeleteApplication } from "@/lib/api"
 import type { JobApplication, Settings } from "@/lib/types"
 import { DEFAULT_STATUSES, DEFAULT_PLATFORMS } from "@/lib/types"
@@ -194,6 +194,7 @@ export function ApplicationsTable({
                 <TableHead>Status</TableHead>
                 <TableHead>Follow-up</TableHead>
                 <TableHead className="hidden lg:table-cell">Link</TableHead>
+                <TableHead className="hidden lg:table-cell">Resume</TableHead>
                 <TableHead className="hidden xl:table-cell">Notes</TableHead>
                 <TableHead className="w-[50px]" />
               </TableRow>
@@ -202,12 +203,12 @@ export function ApplicationsTable({
               {isLoading ? (
                 [...Array(5)].map((_, i) => (
                   <TableRow key={i}>
-                    {[...Array(9)].map((_, j) => (<TableCell key={j}><div className="h-4 w-full animate-pulse rounded bg-muted" /></TableCell>))}
+                    {[...Array(10)].map((_, j) => (<TableCell key={j}><div className="h-4 w-full animate-pulse rounded bg-muted" /></TableCell>))}
                   </TableRow>
                 ))
               ) : applications.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
+                  <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
                     No applications found. Add your first one!
                   </TableCell>
                 </TableRow>
@@ -239,6 +240,13 @@ export function ApplicationsTable({
                       {app.link ? (
                         <a href={app.link} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-primary hover:underline">
                           <ExternalLink className="h-4 w-4" />
+                        </a>
+                      ) : "-"}
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell">
+                      {app.resume ? (
+                        <a href={app.resume} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-primary hover:underline" title="Download resume">
+                          <FileDown className="h-4 w-4" />
                         </a>
                       ) : "-"}
                     </TableCell>

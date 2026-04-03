@@ -547,4 +547,53 @@ router.post("/generate-answer", async (req: AuthRequest, res) => {
   }
 })
 
+// POST /api/profile/generate-cover-letter - Generate a cover letter for a job
+router.post("/generate-cover-letter", async (req: AuthRequest, res) => {
+  try {
+    const { jobTitle, company, jobDescription } = req.body
+    if (!jobDescription) {
+      return res.status(400).json({ error: "Job description is required" })
+    }
+
+    const profile = await Profile.findOne({ userId: req.userId }).select("-resumeData -generatedResumes").lean()
+    if (!profile) {
+      return res.status(404).json({ error: "Profile not found. Please set up your profile first." })
+    }
+
+    const profileSummary = [
+      `Name: ${profile.firstName || ""} ${profile.lastName || ""}`.trim(),
+      profile.email ? `Email: ${profile.email}` : "",
+      profile.phone ? `Phone: ${profile.phone}` : "",
+      profile.summary ? `Summary: ${profile.summary}` : "",
+      profile.experience?.length ? `Experience:\n${(profile.experience as any[]).map((e: any) => `- ${e.title} at ${e.company} (${e.startDate}–${e.endDate}): ${e.description || ""}`).join("\n")}` : "",
+      profile.education?.length ? `Education:\n${(profile.education as any[]).map((e: any) => `- ${e.degree} in ${e.field} from ${e.school}`).join("\n")}` : "",
+      profile.skills?.length ? `Skills: ${profile.skills.join(", ")}` : "",
+    ].filter(Boolean).join("\n")
+
+    const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY })
+    const modelId = process.env.AI_MODEL || "gpt-4o-mini"
+
+    const result = await generateText({
+      model: openai(modelId),
+      system: `You are a professional cover letter writer. Write a concise, compelling cover letter that:
+- Sounds natural and human (not robotic or template-like)
+- Is addressed to the hiring manager at the specific company
+- Opens with a strong hook that shows genuine interest in the role
+- Highlights 2-3 most relevant experiences/skills that match the job requirements
+- Uses specific examples and metrics where possible
+- Shows knowledge of the company (reference something from the job description)
+- Closes with enthusiasm and a call to action
+- Is 3-4 paragraphs, about 250-350 words
+- Does NOT include the candidate's address or date header — just the letter body
+- Uses first person and professional but warm tone`,
+      prompt: `Candidate:\n${profileSummary}\n\nJob: ${jobTitle || "Position"} at ${company || "the company"}\n\nJob Description:\n${jobDescription.substring(0, 8000)}\n\nWrite the cover letter:`,
+    })
+
+    res.json({ coverLetter: result.text.trim() })
+  } catch (error: any) {
+    console.error("Cover letter error:", error)
+    res.status(500).json({ error: error.message || "Failed to generate cover letter" })
+  }
+})
+
 export { router as profileRouter }
