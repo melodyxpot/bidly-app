@@ -6,6 +6,7 @@ export interface DetectedField {
   profileKey: string | null
   filled: boolean
   groupName?: string
+  aiAnswer?: string
 }
 
 function getFieldLabel(el: HTMLElement): string {

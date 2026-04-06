@@ -1,6 +1,7 @@
 import { scrapeJobData } from "./scraper"
 import { detectFormFields, getProfileValue, fillField, attachFileToInput, DetectedField } from "./detector"
 import { login, logout, createApplication, isLoggedIn, getUser, getSettings, getProfile, getResumeInfo, generateResume, generateAnswer, getExtensionSettings, setExtensionSettings, generateCoverLetter, ExtSettings } from "./api"
+import { jsPDF } from "jspdf"
 
 let sidebarRoot: HTMLElement | null = null
 let fab: HTMLElement | null = null
@@ -208,7 +209,7 @@ async function renderMain(user: any) {
         </div>
         ` : `
         <div id="bidly-fields-list">
-          ${renderFieldsList(detectedFields, true)}
+          ${renderFieldsListDisabled(detectedFields)}
         </div>
         ${detectedFields.filter(f => isCustomQuestion(f)).length === 0 ? '<div style="font-size:12px;color:#888;text-align:center;padding:12px 0">Auto-fill is disabled. Enable it in Settings (⚙️).</div>' : ''}
         `}
@@ -343,7 +344,7 @@ async function renderMain(user: any) {
   sidebarRoot.querySelector("#bidly-scan")?.addEventListener("click", () => {
     detectedFields = detectFormFields()
     const listEl = sidebarRoot!.querySelector("#bidly-fields-list")
-    if (listEl) listEl.innerHTML = renderFieldsList(detectedFields, !extSettings.autofillEnabled)
+    if (listEl) listEl.innerHTML = extSettings.autofillEnabled ? renderFieldsList(detectedFields, false) : renderFieldsListDisabled(detectedFields)
     bindAIButtons()
     const countEl = sidebarRoot!.querySelector(".bidly-field-count")
     if (countEl) countEl.textContent = `${detectedFields.length} field${detectedFields.length !== 1 ? 's' : ''} detected`
@@ -383,7 +384,7 @@ async function renderMain(user: any) {
 
     // Update the fields list UI
     const listEl = sidebarRoot!.querySelector("#bidly-fields-list")
-    if (listEl) listEl.innerHTML = renderFieldsList(detectedFields, !extSettings.autofillEnabled)
+    if (listEl) listEl.innerHTML = extSettings.autofillEnabled ? renderFieldsList(detectedFields, false) : renderFieldsListDisabled(detectedFields)
     bindAIButtons()
 
     btn.disabled = false
@@ -450,7 +451,10 @@ async function renderMain(user: any) {
         <div class="bidly-message bidly-message-success" style="margin-top:8px">
           ✓ Cover letter generated!
           <div style="margin-top:8px;padding:10px;background:#f9fafb;border:1px solid #e5e5e5;border-radius:6px;font-size:12px;line-height:1.6;color:#333;max-height:200px;overflow-y:auto;white-space:pre-wrap">${escapeHtml(result.coverLetter)}</div>
-          <button class="bidly-btn bidly-btn-outline" id="bidly-copy-cover-letter" style="margin-top:8px;font-size:12px">📋 Copy to Clipboard</button>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button class="bidly-btn bidly-btn-outline" id="bidly-copy-cover-letter" style="flex:1;font-size:12px">📋 Copy to Clipboard</button>
+            <button class="bidly-btn bidly-btn-outline" id="bidly-download-cover-letter-pdf" style="flex:1;font-size:12px">📥 Download PDF</button>
+          </div>
         </div>
       `
 
@@ -459,6 +463,32 @@ async function renderMain(user: any) {
         const copyBtn = sidebarRoot!.querySelector("#bidly-copy-cover-letter") as HTMLButtonElement
         copyBtn.textContent = "✓ Copied!"
         setTimeout(() => { copyBtn.textContent = "📋 Copy to Clipboard" }, 2000)
+      })
+
+      sidebarRoot!.querySelector("#bidly-download-cover-letter-pdf")?.addEventListener("click", () => {
+        const doc = new jsPDF()
+        const margin = 20
+        const pageWidth = doc.internal.pageSize.getWidth()
+        const maxWidth = pageWidth - margin * 2
+
+        doc.setFont("helvetica", "normal")
+        doc.setFontSize(12)
+
+        const lines = doc.splitTextToSize(result.coverLetter, maxWidth)
+        const lineHeight = 7
+        let y = margin
+
+        for (const line of lines) {
+          if (y + lineHeight > doc.internal.pageSize.getHeight() - margin) {
+            doc.addPage()
+            y = margin
+          }
+          doc.text(line, margin, y)
+          y += lineHeight
+        }
+
+        const filename = `Cover_Letter_${scraped.company ? scraped.company.replace(/\s+/g, "_") : "Job"}.pdf`
+        doc.save(filename)
       })
     } catch (err: any) {
       resultDiv.innerHTML = `<div class="bidly-message bidly-message-error" style="margin-top:8px">${escapeHtml(err.message)}</div>`
@@ -534,6 +564,39 @@ function isCustomQuestion(field: DetectedField): boolean {
   return false
 }
 
+function renderFieldsListDisabled(fields: DetectedField[]): string {
+  const filtered = fields.filter(f => f.type !== "select" && (f.type === "text" || f.type === "textarea"))
+  if (filtered.length === 0) return ''
+
+  return filtered.map((f) => {
+    const idx = fields.indexOf(f)
+    const isQuestion = isCustomQuestion(f)
+    const statusIcon = f.filled ? "✅" : (isQuestion ? "💬" : "⬜")
+    const labelClass = f.filled ? "bidly-field-label bidly-field-filled" : "bidly-field-label"
+    const typeLabel = "✎ text"
+    const matchDot = isQuestion ? '<span class="bidly-match-dot" style="background:#f59e0b"></span>' : '<span class="bidly-unmatch-dot"></span>'
+
+    const aiBtn = isQuestion && !f.filled
+      ? `<div class="bidly-field-actions"><button class="bidly-ai-btn" data-field-idx="${idx}" title="Generate AI answer">✨ AI</button></div>`
+      : ""
+    const answerBlock = f.aiAnswer
+      ? `<div style="margin:4px 0 8px 24px;padding:8px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;font-size:11px;line-height:1.5;color:#166534;white-space:pre-wrap">${escapeHtml(f.aiAnswer)}</div>`
+      : ""
+
+    return `
+      <div class="bidly-field-row${isQuestion ? ' bidly-field-row-question' : ''}">
+        <span class="bidly-field-status">${statusIcon}</span>
+        <div class="bidly-field-info">
+          <span class="${labelClass}">${escapeHtml(f.label)}</span>
+          <span class="bidly-field-type">${typeLabel} ${matchDot}</span>
+        </div>
+        ${aiBtn}
+      </div>
+      ${answerBlock}
+    `
+  }).join("")
+}
+
 function renderFieldsList(fields: DetectedField[], questionsOnly = false): string {
   if (fields.length === 0) {
     return '<div style="font-size:12px;color:#888;text-align:center;padding:20px 0">No form fields detected on this page.<br>Navigate to a job application form and click 🔄</div>'
@@ -557,6 +620,9 @@ function renderFieldsList(fields: DetectedField[], questionsOnly = false): strin
     const aiBtn = isQuestion && !f.filled
       ? `<div class="bidly-field-actions"><button class="bidly-ai-btn" data-field-idx="${idx}" title="Generate AI answer">✨ AI</button></div>`
       : ""
+    const answerBlock = f.aiAnswer
+      ? `<div style="margin:4px 0 8px 24px;padding:8px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;font-size:11px;line-height:1.5;color:#166534;white-space:pre-wrap">${escapeHtml(f.aiAnswer)}</div>`
+      : ""
 
     return `
       <div class="${rowClass}">
@@ -567,6 +633,7 @@ function renderFieldsList(fields: DetectedField[], questionsOnly = false): strin
         </div>
         ${aiBtn}
       </div>
+      ${answerBlock}
     `
   }).join("")
 }
@@ -604,11 +671,12 @@ function bindAIButtons() {
           const { fillField } = await import("./detector")
           const success = fillField(field, answer)
           if (success) field.filled = true
+          field.aiAnswer = answer
 
           // Update UI
           const listEl = sidebarRoot!.querySelector("#bidly-fields-list")
           if (listEl) {
-            listEl.innerHTML = renderFieldsList(detectedFields)
+            listEl.innerHTML = extSettings.autofillEnabled ? renderFieldsList(detectedFields, false) : renderFieldsListDisabled(detectedFields)
             bindAIButtons()
           }
         }
