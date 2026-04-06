@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend } from "recharts"
+import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend } from "recharts"
 import {
   apiGetTeams,
   apiCreateTeam,
@@ -27,14 +27,14 @@ import { toast } from "sonner"
 import { Loader2, Plus, Trash2, UserPlus, Crown, LogOut, ArrowUpDown, Search, X } from "lucide-react"
 
 const COLORS = [
-  "hsl(var(--chart-1))",
-  "hsl(var(--chart-2))",
-  "hsl(var(--chart-3))",
-  "hsl(var(--chart-4))",
-  "hsl(var(--chart-5))",
-  "#8b5cf6",
-  "#f97316",
-  "#06b6d4",
+  "#4ade80",
+  "#67e8f9",
+  "#a78bfa",
+  "#fb923c",
+  "#f472b6",
+  "#facc15",
+  "#34d399",
+  "#60a5fa",
 ]
 
 export default function TeamPage() {
@@ -422,10 +422,18 @@ export default function TeamPage() {
                     <CardContent>
                       <div className="h-[400px]">
                         <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={dashboardData.chartData?.map((d: any) => ({
+                          <AreaChart data={dashboardData.chartData?.map((d: any) => ({
                             ...d,
-                            label: new Date(d.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+                            label: new Date(d.date).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit" }),
                           }))}>
+                            <defs>
+                              {dashboardData.memberNames?.map((name: string, i: number) => (
+                                <linearGradient key={name} id={`teamGrad-${i}`} x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor={COLORS[i % COLORS.length]} stopOpacity={0.4} />
+                                  <stop offset="100%" stopColor={COLORS[i % COLORS.length]} stopOpacity={0.05} />
+                                </linearGradient>
+                              ))}
+                            </defs>
                             <XAxis dataKey="label" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
                             <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} allowDecimals={false} />
                             <Tooltip
@@ -433,13 +441,23 @@ export default function TeamPage() {
                                 backgroundColor: "hsl(var(--background))",
                                 border: "1px solid hsl(var(--border))",
                                 borderRadius: "var(--radius)",
+                                color: "hsl(var(--foreground))",
                               }}
+                              labelStyle={{ color: "hsl(var(--foreground))" }}
+                              itemStyle={{ color: "hsl(var(--foreground))" }}
                             />
                             <Legend />
                             {dashboardData.memberNames?.map((name: string, i: number) => (
-                              <Bar key={name} dataKey={name} fill={COLORS[i % COLORS.length]} radius={[2, 2, 0, 0]} stackId="a" />
+                              <Area
+                                key={name}
+                                type="monotone"
+                                dataKey={name}
+                                stroke={COLORS[i % COLORS.length]}
+                                strokeWidth={2}
+                                fill={`url(#teamGrad-${i})`}
+                              />
                             ))}
-                          </BarChart>
+                          </AreaChart>
                         </ResponsiveContainer>
                       </div>
                     </CardContent>
