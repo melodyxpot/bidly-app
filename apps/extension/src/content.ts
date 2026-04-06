@@ -190,29 +190,9 @@ async function renderMain(user: any) {
         
         <div class="bidly-divider"></div>
         
-        ${extSettings.autofillEnabled ? `
-        <div style="display:flex;gap:8px;margin-bottom:12px;">
-          <button class="bidly-btn bidly-btn-primary" id="bidly-autofill-all" style="flex:1">
-            ✨ Auto-fill All
-          </button>
-          <button class="bidly-btn bidly-btn-outline" id="bidly-scan" style="width:auto;padding:9px 14px" title="Re-scan fields">
-            🔄
-          </button>
+        <div id="bidly-autofill-section">
+          ${renderAutofillSection()}
         </div>
-        
-        ${!cachedProfile ? '<div class="bidly-message bidly-message-error">Could not load profile. Please set up your profile first.</div>' : ''}
-        
-        <div class="bidly-field-count">${detectedFields.length} field${detectedFields.length !== 1 ? 's' : ''} detected</div>
-        
-        <div id="bidly-fields-list">
-          ${renderFieldsList(detectedFields, false)}
-        </div>
-        ` : `
-        <div id="bidly-fields-list">
-          ${renderFieldsListDisabled(detectedFields)}
-        </div>
-        ${detectedFields.filter(f => isCustomQuestion(f)).length === 0 ? '<div style="font-size:12px;color:#888;text-align:center;padding:12px 0">Auto-fill is disabled. Enable it in Settings (⚙️).</div>' : ''}
-        `}
       </div>
       
       <div class="bidly-body" id="bidly-tab-save" style="display:none">
@@ -324,6 +304,7 @@ async function renderMain(user: any) {
     autofillToggle.addEventListener("change", async () => {
       extSettings.autofillEnabled = autofillToggle.checked
       await setExtensionSettings(extSettings)
+      refreshAutofillSection()
     })
   }
   const saveResumeToggle = sidebarRoot.querySelector("#bidly-setting-save-resume") as HTMLInputElement
@@ -340,56 +321,8 @@ async function renderMain(user: any) {
     renderSidebar()
   })
 
-  // Scan button
-  sidebarRoot.querySelector("#bidly-scan")?.addEventListener("click", () => {
-    detectedFields = detectFormFields()
-    const listEl = sidebarRoot!.querySelector("#bidly-fields-list")
-    if (listEl) listEl.innerHTML = extSettings.autofillEnabled ? renderFieldsList(detectedFields, false) : renderFieldsListDisabled(detectedFields)
-    bindAIButtons()
-    const countEl = sidebarRoot!.querySelector(".bidly-field-count")
-    if (countEl) countEl.textContent = `${detectedFields.length} field${detectedFields.length !== 1 ? 's' : ''} detected`
-  })
-
-  // Auto-fill all button
-  sidebarRoot.querySelector("#bidly-autofill-all")?.addEventListener("click", async () => {
-    if (!cachedProfile) return
-
-    const btn = sidebarRoot!.querySelector("#bidly-autofill-all") as HTMLButtonElement
-    btn.disabled = true
-    btn.textContent = "Filling..."
-
-    for (const field of detectedFields) {
-      if (field.filled || !field.profileKey) continue
-
-      if (field.profileKey === "resumeFile" || field.profileKey === "coverLetterFile") {
-        try {
-          const resumeInfo = await getResumeInfo()
-          if (resumeInfo.url) {
-            const success = await attachFileToInput(
-              field.element as HTMLInputElement,
-              resumeInfo.url,
-              resumeInfo.filename || "resume.pdf"
-            )
-            if (success) field.filled = true
-          }
-        } catch {}
-      } else {
-        const value = getProfileValue(cachedProfile, field.profileKey)
-        if (value) {
-          const success = fillField(field, value)
-          if (success) field.filled = true
-        }
-      }
-    }
-
-    // Update the fields list UI
-    const listEl = sidebarRoot!.querySelector("#bidly-fields-list")
-    if (listEl) listEl.innerHTML = extSettings.autofillEnabled ? renderFieldsList(detectedFields, false) : renderFieldsListDisabled(detectedFields)
-    bindAIButtons()
-
-    btn.disabled = false
-    btn.textContent = "✨ Auto-fill All"
-  })
+  // Bind scan + autofill-all buttons
+  bindAutofillEvents()
 
   // Generate custom resume
   sidebarRoot.querySelector("#bidly-generate-resume")?.addEventListener("click", async () => {
@@ -488,7 +421,15 @@ async function renderMain(user: any) {
         }
 
         const filename = `Cover_Letter_${scraped.company ? scraped.company.replace(/\s+/g, "_") : "Job"}.pdf`
-        doc.save(filename)
+        const pdfBlob = doc.output("blob")
+        const url = URL.createObjectURL(pdfBlob)
+        const a = document.createElement("a")
+        a.href = url
+        a.download = filename
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
       })
     } catch (err: any) {
       resultDiv.innerHTML = `<div class="bidly-message bidly-message-error" style="margin-top:8px">${escapeHtml(err.message)}</div>`
@@ -562,6 +503,85 @@ function isCustomQuestion(field: DetectedField): boolean {
   if (label.includes("?")) return true
   if (label.match(/^(why|how|what|describe|tell|explain|please|are you|do you|have you|would you|can you)/)) return true
   return false
+}
+
+function renderAutofillSection(): string {
+  if (extSettings.autofillEnabled) {
+    return `
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <button class="bidly-btn bidly-btn-primary" id="bidly-autofill-all" style="flex:1">
+          ✨ Auto-fill All
+        </button>
+        <button class="bidly-btn bidly-btn-outline" id="bidly-scan" style="width:auto;padding:9px 14px" title="Re-scan fields">
+          🔄
+        </button>
+      </div>
+      ${!cachedProfile ? '<div class="bidly-message bidly-message-error">Could not load profile. Please set up your profile first.</div>' : ''}
+      <div class="bidly-field-count">${detectedFields.length} field${detectedFields.length !== 1 ? 's' : ''} detected</div>
+      <div id="bidly-fields-list">
+        ${renderFieldsList(detectedFields, false)}
+      </div>
+    `
+  }
+  return `
+    <div id="bidly-fields-list">
+      ${renderFieldsListDisabled(detectedFields)}
+    </div>
+    ${detectedFields.filter(f => isCustomQuestion(f)).length === 0 ? '<div style="font-size:12px;color:#888;text-align:center;padding:12px 0">Auto-fill is disabled. Enable it in Settings (⚙️).</div>' : ''}
+  `
+}
+
+function refreshAutofillSection() {
+  if (!sidebarRoot) return
+  const section = sidebarRoot.querySelector("#bidly-autofill-section")
+  if (section) {
+    section.innerHTML = renderAutofillSection()
+    bindAutofillEvents()
+    bindAIButtons()
+  }
+}
+
+function bindAutofillEvents() {
+  if (!sidebarRoot) return
+
+  sidebarRoot.querySelector("#bidly-scan")?.addEventListener("click", () => {
+    detectedFields = detectFormFields()
+    refreshAutofillSection()
+  })
+
+  sidebarRoot.querySelector("#bidly-autofill-all")?.addEventListener("click", async () => {
+    if (!cachedProfile) return
+
+    const btn = sidebarRoot!.querySelector("#bidly-autofill-all") as HTMLButtonElement
+    btn.disabled = true
+    btn.textContent = "Filling..."
+
+    for (const field of detectedFields) {
+      if (field.filled || !field.profileKey) continue
+
+      if (field.profileKey === "resumeFile" || field.profileKey === "coverLetterFile") {
+        try {
+          const resumeInfo = await getResumeInfo()
+          if (resumeInfo.url) {
+            const success = await attachFileToInput(
+              field.element as HTMLInputElement,
+              resumeInfo.url,
+              resumeInfo.filename || "resume.pdf"
+            )
+            if (success) field.filled = true
+          }
+        } catch {}
+      } else {
+        const value = getProfileValue(cachedProfile, field.profileKey)
+        if (value) {
+          const success = fillField(field, value)
+          if (success) field.filled = true
+        }
+      }
+    }
+
+    refreshAutofillSection()
+  })
 }
 
 function renderFieldsListDisabled(fields: DetectedField[]): string {
@@ -668,17 +688,12 @@ function bindAIButtons() {
         })
 
         if (answer) {
-          const { fillField } = await import("./detector")
           const success = fillField(field, answer)
           if (success) field.filled = true
           field.aiAnswer = answer
 
           // Update UI
-          const listEl = sidebarRoot!.querySelector("#bidly-fields-list")
-          if (listEl) {
-            listEl.innerHTML = extSettings.autofillEnabled ? renderFieldsList(detectedFields, false) : renderFieldsListDisabled(detectedFields)
-            bindAIButtons()
-          }
+          refreshAutofillSection()
         }
       } catch (err: any) {
         btn.textContent = "❌ Error"

@@ -34,30 +34,30 @@ export function ApplicationsChart({ data }: ApplicationsChartProps) {
             <BarChart data={formattedData}>
               <XAxis
                 dataKey="label"
-                stroke="hsl(var(--muted-foreground))"
+                stroke="#a1a1aa"
                 fontSize={12}
                 tickLine={false}
                 axisLine={false}
               />
               <YAxis
-                stroke="hsl(var(--muted-foreground))"
+                stroke="#a1a1aa"
                 fontSize={12}
                 tickLine={false}
                 axisLine={false}
                 allowDecimals={false}
               />
               <Tooltip
-                cursor={{ fill: "hsl(var(--muted))", opacity: 0.3 }}
+                cursor={{ fill: "#3f3f46", opacity: 0.3 }}
                 contentStyle={{
-                  backgroundColor: "hsl(var(--background))",
-                  border: "1px solid hsl(var(--border))",
-                  borderRadius: "var(--radius)",
-                  color: "hsl(var(--foreground))",
+                  backgroundColor: "#18181b",
+                  border: "1px solid #3f3f46",
+                  borderRadius: "8px",
+                  color: "#fafafa",
                 }}
-                labelStyle={{ color: "hsl(var(--foreground))" }}
-                itemStyle={{ color: "hsl(var(--foreground))" }}
+                labelStyle={{ color: "#fafafa" }}
+                itemStyle={{ color: "#fafafa" }}
               />
-              <Bar dataKey="count" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} name="Applications" />
+              <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Applications" />
             </BarChart>
           </ResponsiveContainer>
         </div>
