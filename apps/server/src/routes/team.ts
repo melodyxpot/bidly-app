@@ -4,6 +4,10 @@ import { Team } from "../models/Team"
 import { User } from "../models/User"
 import { JobApplication } from "../models/JobApplication"
 
+function toDateStr(date: Date, tz: string): string {
+  return date.toLocaleDateString("en-CA", { timeZone: tz })
+}
+
 const router = Router()
 router.use(authenticate)
 
@@ -246,6 +250,7 @@ router.get("/:id/dashboard", async (req: AuthRequest, res) => {
 
     const memberIds = team.members.map((m: any) => m.userId?._id || m.userId)
     const days = parseInt(req.query.days as string) || 14
+    const tz = (req.query.tz as string) || "UTC"
 
     const startDate = new Date()
     startDate.setDate(startDate.getDate() - days)
@@ -270,13 +275,13 @@ router.get("/:id/dashboard", async (req: AuthRequest, res) => {
       for (let i = 0; i <= days; i++) {
         const d = new Date()
         d.setDate(d.getDate() - (days - i))
-        memberChartData[uid][d.toISOString().split("T")[0]] = 0
+        memberChartData[uid][toDateStr(d, tz)] = 0
       }
     }
 
     for (const app of applications) {
       const uid = app.userId.toString()
-      const dateStr = new Date(app.appliedAt).toISOString().split("T")[0]
+      const dateStr = toDateStr(new Date(app.appliedAt), tz)
       if (memberChartData[uid]?.[dateStr] !== undefined) {
         memberChartData[uid][dateStr]++
       }
@@ -287,7 +292,7 @@ router.get("/:id/dashboard", async (req: AuthRequest, res) => {
     for (let i = 0; i <= days; i++) {
       const d = new Date()
       d.setDate(d.getDate() - (days - i))
-      dates.push(d.toISOString().split("T")[0])
+      dates.push(toDateStr(d, tz))
     }
 
     const chartData = dates.map(date => {

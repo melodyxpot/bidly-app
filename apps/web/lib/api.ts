@@ -128,7 +128,7 @@ export async function apiGetDashboardStats() {
 }
 
 export async function apiGetChartData(days = 14) {
-  const res = await authFetch(`${API_BASE}/dashboard/chart?days=${days}`)
+  const res = await authFetch(`${API_BASE}/dashboard/chart?days=${days}&tz=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`)
   if (!res.ok) throw new Error("Failed to fetch chart data")
   return res.json()
 }
@@ -293,7 +293,7 @@ export async function apiLeaveTeam(teamId: string) {
 }
 
 export async function apiGetTeamDashboard(teamId: string, days = 14) {
-  const res = await authFetch(`${API_BASE}/teams/${teamId}/dashboard?days=${days}`)
+  const res = await authFetch(`${API_BASE}/teams/${teamId}/dashboard?days=${days}&tz=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`)
   if (!res.ok) throw new Error("Failed to fetch team dashboard")
   return res.json()
 }

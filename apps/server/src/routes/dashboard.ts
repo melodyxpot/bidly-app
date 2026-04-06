@@ -2,6 +2,10 @@ import { Router } from "express"
 import { authenticate, AuthRequest } from "../middleware/auth"
 import { JobApplication } from "../models/JobApplication"
 
+function toDateStr(date: Date, tz: string): string {
+  return date.toLocaleDateString("en-CA", { timeZone: tz })
+}
+
 const router = Router()
 router.use(authenticate)
 
@@ -42,6 +46,7 @@ router.get("/stats", async (req: AuthRequest, res) => {
 router.get("/chart", async (req: AuthRequest, res) => {
   try {
     const days = parseInt(req.query.days as string) || 14
+    const tz = (req.query.tz as string) || "UTC"
     const startDate = new Date()
     startDate.setDate(startDate.getDate() - days)
 
@@ -57,11 +62,11 @@ router.get("/chart", async (req: AuthRequest, res) => {
     for (let i = 0; i <= days; i++) {
       const date = new Date()
       date.setDate(date.getDate() - (days - i))
-      countsByDate[date.toISOString().split("T")[0]] = 0
+      countsByDate[toDateStr(date, tz)] = 0
     }
 
     data.forEach((app) => {
-      const dateStr = new Date(app.appliedAt).toISOString().split("T")[0]
+      const dateStr = toDateStr(new Date(app.appliedAt), tz)
       if (countsByDate[dateStr] !== undefined) {
         countsByDate[dateStr]++
       }
