@@ -596,12 +596,29 @@ router.post("/generate-cover-letter", async (req: AuthRequest, res) => {
   }
 })
 
+const chatUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = [
+      "application/pdf",
+      "image/png",
+      "image/jpeg",
+      "image/webp",
+      "image/gif",
+      "text/plain",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ]
+    cb(null, allowed.includes(file.mimetype))
+  },
+})
+
 // POST /api/profile/chat - Chat with Bidly AI
-router.post("/chat", async (req: AuthRequest, res) => {
+router.post("/chat", chatUpload.array("files", 5), async (req: AuthRequest, res) => {
   try {
     const { message } = req.body
-    if (!message) {
-      return res.status(400).json({ error: "Message is required" })
+    if (!message && (!req.files || (req.files as Express.Multer.File[]).length === 0)) {
+      return res.status(400).json({ error: "Message or file is required" })
     }
 
     const profile = await Profile.findOne({ userId: req.userId }).select("-resumeData -generatedResumes").lean()
@@ -614,13 +631,36 @@ router.post("/chat", async (req: AuthRequest, res) => {
       profile.skills?.length ? `Skills: ${profile.skills.join(", ")}` : "",
     ].filter(Boolean).join("\n") : ""
 
+    // Process attached files
+    const fileContents: string[] = []
+    const files = (req.files as Express.Multer.File[]) || []
+    for (const file of files) {
+      try {
+        if (file.mimetype === "application/pdf") {
+          const parsed = await pdfParse(file.buffer)
+          fileContents.push(`[File: ${file.originalname}]\n${parsed.text.substring(0, 10000)}`)
+        } else if (file.mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+          const result = await mammoth.extractRawText({ buffer: file.buffer })
+          fileContents.push(`[File: ${file.originalname}]\n${result.value.substring(0, 10000)}`)
+        } else if (file.mimetype === "text/plain") {
+          fileContents.push(`[File: ${file.originalname}]\n${file.buffer.toString("utf-8").substring(0, 10000)}`)
+        } else if (file.mimetype.startsWith("image/")) {
+          fileContents.push(`[Image attached: ${file.originalname} (${file.mimetype}, ${Math.round(file.size / 1024)}KB)]`)
+        }
+      } catch {
+        fileContents.push(`[File: ${file.originalname} - could not read contents]`)
+      }
+    }
+
     const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY })
     const modelId = process.env.AI_MODEL || "gpt-4o-mini"
+
+    const attachmentText = fileContents.length > 0 ? `\n\nAttached files:\n${fileContents.join("\n\n")}` : ""
 
     const result = await generateText({
       model: openai(modelId),
       system: `You are Bidly AI, a helpful career assistant. You help with resume writing, interview preparation, cover letters, job application questions, and career advice. You have access to the user's profile and should reference their actual experience, skills, and education when relevant. Be concise, practical, and encouraging. If the user asks to generate a resume or cover letter, do so in full. Format your responses with markdown when appropriate.`,
-      prompt: `User profile:\n${profileSummary || "No profile available"}\n\nUser message: ${message}`,
+      prompt: `User profile:\n${profileSummary || "No profile available"}\n\nUser message: ${message || "Please review the attached file(s)."}${attachmentText}`,
     })
 
     res.json({ reply: result.text.trim() })

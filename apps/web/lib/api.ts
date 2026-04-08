@@ -305,10 +305,17 @@ export async function apiGetTeamApplications(teamId: string, params: Record<stri
   return res.json()
 }
 
-export async function apiChat(message: string) {
-  const res = await authFetch(`${API_BASE}/profile/chat`, {
+export async function apiChat(message: string, files?: File[]) {
+  const token = getToken()
+  const formData = new FormData()
+  formData.append("message", message)
+  if (files) {
+    files.forEach((file) => formData.append("files", file))
+  }
+  const res = await fetch(`${API_BASE}/profile/chat`, {
     method: "POST",
-    body: JSON.stringify({ message }),
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
   })
   const result = await res.json()
   if (!res.ok) throw new Error(result.error || "Failed to get response")
