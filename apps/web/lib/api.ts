@@ -304,3 +304,13 @@ export async function apiGetTeamApplications(teamId: string, params: Record<stri
   if (!res.ok) throw new Error("Failed to fetch team applications")
   return res.json()
 }
+
+export async function apiChat(message: string) {
+  const res = await authFetch(`${API_BASE}/profile/chat`, {
+    method: "POST",
+    body: JSON.stringify({ message }),
+  })
+  const result = await res.json()
+  if (!res.ok) throw new Error(result.error || "Failed to get response")
+  return result
+}

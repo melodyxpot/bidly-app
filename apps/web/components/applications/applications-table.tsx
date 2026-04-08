@@ -26,6 +26,8 @@ interface ApplicationsTableProps {
   sortBy: string
   sortOrder: "asc" | "desc"
   settings: Settings | null
+  onEdit: (id: string) => void
+  refreshKey?: number
 }
 
 const PAGE_SIZE = 20
@@ -40,6 +42,8 @@ export function ApplicationsTable({
   sortBy,
   sortOrder,
   settings,
+  onEdit,
+  refreshKey,
 }: ApplicationsTableProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -50,7 +54,6 @@ export function ApplicationsTable({
   const [searchInput, setSearchInput] = useState(search)
 
   const platforms = settings?.platformOptions || DEFAULT_PLATFORMS
-  const refreshAt = searchParams.get("refreshAt")
 
   const fetchApplications = useCallback(async () => {
     if (isInitialLoad) {
@@ -81,7 +84,7 @@ export function ApplicationsTable({
 
   useEffect(() => {
     fetchApplications()
-  }, [fetchApplications, refreshAt])
+  }, [fetchApplications, refreshKey])
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -217,7 +220,7 @@ export function ApplicationsTable({
                   <TableRow
                     key={app._id}
                     className={cn("cursor-pointer hover:bg-muted/50", isOverdue(app) && "bg-destructive/5")}
-                    onClick={() => router.push(`/applications?edit=${app._id}`)}
+                    onClick={() => onEdit(app._id)}
                   >
                     <TableCell className="text-sm">
                       {new Date(app.appliedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })}
@@ -257,7 +260,7 @@ export function ApplicationsTable({
                           <Button variant="ghost" size="icon" className="h-8 w-8"><MoreHorizontal className="h-4 w-4" /></Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); router.push(`/applications?edit=${app._id}`) }}>
+                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit(app._id) }}>
                             <Pencil className="mr-2 h-4 w-4" />Edit
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleDelete(app._id) }} className="text-destructive">

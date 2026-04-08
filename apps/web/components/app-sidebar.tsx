@@ -57,13 +57,13 @@ export function AppSidebar({ user }: AppSidebarProps) {
           <SidebarGroupContent>
             <div className="flex flex-col gap-2 px-2">
               <Button asChild size="sm" className="justify-start">
-                <Link href="/applications?add=true">
+                <Link href="/applications">
                   <Plus className="mr-2 h-4 w-4" />
                   Add Application
                 </Link>
               </Button>
               <Button asChild variant="outline" size="sm" className="justify-start bg-transparent">
-                <Link href="/applications?quickpaste=true">
+                <Link href="/applications">
                   <ClipboardPaste className="mr-2 h-4 w-4" />
                   Quick Paste
                 </Link>

@@ -596,4 +596,38 @@ router.post("/generate-cover-letter", async (req: AuthRequest, res) => {
   }
 })
 
+// POST /api/profile/chat - Chat with Bidly AI
+router.post("/chat", async (req: AuthRequest, res) => {
+  try {
+    const { message } = req.body
+    if (!message) {
+      return res.status(400).json({ error: "Message is required" })
+    }
+
+    const profile = await Profile.findOne({ userId: req.userId }).select("-resumeData -generatedResumes").lean()
+
+    const profileSummary = profile ? [
+      profile.firstName && profile.lastName ? `Name: ${profile.firstName} ${profile.lastName}` : "",
+      profile.summary ? `Summary: ${profile.summary}` : "",
+      profile.experience?.length ? `Experience: ${(profile.experience as any[]).map((e: any) => `${e.title} at ${e.company}`).join(", ")}` : "",
+      profile.education?.length ? `Education: ${(profile.education as any[]).map((e: any) => `${e.degree} in ${e.field} from ${e.school}`).join(", ")}` : "",
+      profile.skills?.length ? `Skills: ${profile.skills.join(", ")}` : "",
+    ].filter(Boolean).join("\n") : ""
+
+    const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY })
+    const modelId = process.env.AI_MODEL || "gpt-4o-mini"
+
+    const result = await generateText({
+      model: openai(modelId),
+      system: `You are Bidly AI, a helpful career assistant. You help with resume writing, interview preparation, cover letters, job application questions, and career advice. You have access to the user's profile and should reference their actual experience, skills, and education when relevant. Be concise, practical, and encouraging. If the user asks to generate a resume or cover letter, do so in full. Format your responses with markdown when appropriate.`,
+      prompt: `User profile:\n${profileSummary || "No profile available"}\n\nUser message: ${message}`,
+    })
+
+    res.json({ reply: result.text.trim() })
+  } catch (error: any) {
+    console.error("Chat error:", error)
+    res.status(500).json({ error: error.message || "Failed to generate response" })
+  }
+})
+
 export { router as profileRouter }

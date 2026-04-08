@@ -1,14 +1,18 @@
 "use client"
 
 import { useState } from "react"
-import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Plus, ClipboardPaste, Download, Loader2 } from "lucide-react"
 import { apiGetApplications } from "@/lib/api"
 import { toast } from "sonner"
 import * as XLSX from "xlsx"
 
-export function ApplicationsHeader() {
+interface ApplicationsHeaderProps {
+  onAdd: () => void
+  onQuickPaste: () => void
+}
+
+export function ApplicationsHeader({ onAdd, onQuickPaste }: ApplicationsHeaderProps) {
   const [exporting, setExporting] = useState(false)
 
   const handleExport = async () => {
@@ -46,17 +50,13 @@ export function ApplicationsHeader() {
         <p className="text-muted-foreground">Manage and track all your job applications</p>
       </div>
       <div className="flex gap-3">
-        <Button asChild>
-          <Link href="/applications?add=true">
-            <Plus className="mr-2 h-4 w-4" />
-            Add Application
-          </Link>
+        <Button onClick={onAdd}>
+          <Plus className="mr-2 h-4 w-4" />
+          Add Application
         </Button>
-        <Button asChild variant="outline">
-          <Link href="/applications?quickpaste=true">
-            <ClipboardPaste className="mr-2 h-4 w-4" />
-            Quick Paste
-          </Link>
+        <Button variant="outline" onClick={onQuickPaste}>
+          <ClipboardPaste className="mr-2 h-4 w-4" />
+          Quick Paste
         </Button>
         <Button variant="outline" onClick={handleExport} disabled={exporting}>
           {exporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}

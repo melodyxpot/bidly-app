@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth-context"
 import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
+import { Chatbot } from "@/components/chatbot"
 
 export default function ProtectedLayout({
   children,
@@ -40,6 +41,7 @@ export default function ProtectedLayout({
         </header>
         <main className="flex-1 overflow-auto">{children}</main>
       </SidebarInset>
+      <Chatbot />
     </SidebarProvider>
   )
 }

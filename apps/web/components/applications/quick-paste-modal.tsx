@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { useRouter } from "next/navigation"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -27,6 +26,8 @@ function toLocalDateTimeString(date: Date): string {
 interface QuickPasteModalProps {
   open: boolean
   settings: Settings | null
+  onClose: () => void
+  onSaved: () => void
 }
 
 type ParseFormat = "pipe" | "tab" | "url"
@@ -39,8 +40,7 @@ interface ParsedRow {
   error?: string
 }
 
-export function QuickPasteModal({ open, settings }: QuickPasteModalProps) {
-  const router = useRouter()
+export function QuickPasteModal({ open, settings, onClose, onSaved }: QuickPasteModalProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [rawText, setRawText] = useState("")
   const [format, setFormat] = useState<ParseFormat>("pipe")
@@ -88,7 +88,7 @@ export function QuickPasteModal({ open, settings }: QuickPasteModalProps) {
   const validRows = parsedRows.filter((r) => r.isValid)
   const invalidRows = parsedRows.filter((r) => !r.isValid)
 
-  const handleClose = () => { router.push("/applications") }
+  const handleClose = () => { onClose(); onSaved() }
   const handleClear = () => { setRawText("") }
   const handleCopyInvalid = () => {
     const invalidLines = invalidRows.map((r) => `${r.company}|${r.title}|${r.link || ""}`).join("\n")

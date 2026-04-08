@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
@@ -33,10 +32,11 @@ interface ApplicationDrawerProps {
   open: boolean
   editId?: string
   settings: Settings | null
+  onClose: () => void
+  onSaved: () => void
 }
 
-export function ApplicationDrawer({ open, editId, settings }: ApplicationDrawerProps) {
-  const router = useRouter()
+export function ApplicationDrawer({ open, editId, settings, onClose, onSaved }: ApplicationDrawerProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [isFetching, setIsFetching] = useState(false)
 
@@ -133,9 +133,10 @@ export function ApplicationDrawer({ open, editId, settings }: ApplicationDrawerP
     }
   }, [open, editId])
 
-  const handleClose = () => {
+  const handleClose = (saved = false) => {
     reset()
-    router.push(`/applications?refreshAt=${Date.now()}`)
+    onClose()
+    if (saved) onSaved()
   }
 
   const onSubmit = async (data: JobApplicationFormData, addAnother = false) => {
@@ -159,11 +160,12 @@ export function ApplicationDrawer({ open, editId, settings }: ApplicationDrawerP
       if (editId) {
         await apiUpdateApplication(editId, applicationData)
         toast.success("Application updated")
-        handleClose()
+        handleClose(true)
       } else {
         await apiCreateApplication(applicationData)
         toast.success("Application added")
         if (addAnother) {
+          onSaved()
           reset({
             company: "",
             title: "",
@@ -182,7 +184,7 @@ export function ApplicationDrawer({ open, editId, settings }: ApplicationDrawerP
             companyInput?.focus()
           }, 100)
         } else {
-          handleClose()
+          handleClose(true)
         }
       }
     } catch (err: any) {
