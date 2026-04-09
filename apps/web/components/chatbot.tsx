@@ -1,7 +1,9 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from "react"
-import { MessageCircle, X, Send, Loader2, Maximize2, Minimize2, Paperclip, FileText, ImageIcon } from "lucide-react"
+import { MessageCircle, X, Send, Loader2, Maximize2, Minimize2, Paperclip, FileText, ImageIcon, Copy, Check } from "lucide-react"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 import { apiChat } from "@/lib/api"
 
 interface Attachment {
@@ -13,6 +15,68 @@ interface Message {
   role: "user" | "assistant"
   content: string
   attachments?: { name: string; type: string }[]
+}
+
+function CodeBlock({ className, children }: { className?: string; children?: React.ReactNode }) {
+  const [copied, setCopied] = useState(false)
+  const match = /language-(\w+)/.exec(className || "")
+  const lang = match ? match[1] : ""
+  const code = String(children).replace(/\n$/, "")
+
+  function handleCopy() {
+    navigator.clipboard.writeText(code)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div className="group relative my-2 rounded-lg bg-zinc-900 text-zinc-100">
+      <div className="flex items-center justify-between px-4 py-1.5 text-xs text-zinc-400">
+        <span>{lang}</span>
+        <button onClick={handleCopy} className="flex items-center gap-1 hover:text-zinc-200 transition-colors">
+          {copied ? <><Check className="h-3 w-3" /> Copied</> : <><Copy className="h-3 w-3" /> Copy</>}
+        </button>
+      </div>
+      <pre className="overflow-x-auto px-4 pb-3 text-sm leading-relaxed"><code>{code}</code></pre>
+    </div>
+  )
+}
+
+function MarkdownContent({ content }: { content: string }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        h1: ({ children }) => <h1 className="text-xl font-bold mt-4 mb-2">{children}</h1>,
+        h2: ({ children }) => <h2 className="text-lg font-bold mt-3 mb-1.5">{children}</h2>,
+        h3: ({ children }) => <h3 className="text-base font-semibold mt-3 mb-1">{children}</h3>,
+        h4: ({ children }) => <h4 className="text-sm font-semibold mt-2 mb-1">{children}</h4>,
+        p: ({ children }) => <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>,
+        ul: ({ children }) => <ul className="mb-2 ml-4 list-disc space-y-1">{children}</ul>,
+        ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal space-y-1">{children}</ol>,
+        li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+        strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+        em: ({ children }) => <em className="italic">{children}</em>,
+        a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-2 hover:opacity-80">{children}</a>,
+        blockquote: ({ children }) => <blockquote className="my-2 border-l-2 border-muted-foreground/30 pl-3 italic text-muted-foreground">{children}</blockquote>,
+        hr: () => <hr className="my-3 border-border" />,
+        table: ({ children }) => <div className="my-2 overflow-x-auto"><table className="w-full border-collapse text-sm">{children}</table></div>,
+        thead: ({ children }) => <thead className="border-b border-border">{children}</thead>,
+        th: ({ children }) => <th className="px-3 py-1.5 text-left font-semibold">{children}</th>,
+        td: ({ children }) => <td className="border-t border-border px-3 py-1.5">{children}</td>,
+        code: ({ className, children, ...props }) => {
+          const isInline = !className
+          if (isInline) {
+            return <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">{children}</code>
+          }
+          return <CodeBlock className={className}>{children}</CodeBlock>
+        },
+        pre: ({ children }) => <>{children}</>,
+      }}
+    >
+      {content}
+    </ReactMarkdown>
+  )
 }
 
 export function Chatbot() {
@@ -189,23 +253,25 @@ export function Chatbot() {
             )}
             {messages.map((msg, i) => (
               <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ${
-                  msg.role === "user"
-                    ? "bg-primary text-primary-foreground rounded-br-md"
-                    : "bg-muted text-foreground rounded-bl-md"
-                }`}>
-                  {msg.attachments && msg.attachments.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mb-1.5">
-                      {msg.attachments.map((a, j) => (
-                        <span key={j} className="inline-flex items-center gap-1 rounded-md bg-black/10 px-2 py-0.5 text-xs">
-                          {a.type.startsWith("image/") ? <ImageIcon className="h-3 w-3" /> : <FileText className="h-3 w-3" />}
-                          {a.name}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  <div className="whitespace-pre-wrap">{msg.content}</div>
-                </div>
+                {msg.role === "user" ? (
+                  <div className="max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-2.5 text-sm text-primary-foreground">
+                    {msg.attachments && msg.attachments.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mb-1.5">
+                        {msg.attachments.map((a, j) => (
+                          <span key={j} className="inline-flex items-center gap-1 rounded-md bg-black/10 px-2 py-0.5 text-xs">
+                            {a.type.startsWith("image/") ? <ImageIcon className="h-3 w-3" /> : <FileText className="h-3 w-3" />}
+                            {a.name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <div className="whitespace-pre-wrap">{msg.content}</div>
+                  </div>
+                ) : (
+                  <div className="max-w-[85%] text-sm text-foreground">
+                    <MarkdownContent content={msg.content} />
+                  </div>
+                )}
               </div>
             ))}
             {loading && (
